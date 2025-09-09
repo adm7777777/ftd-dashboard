@@ -316,13 +316,16 @@ if len(selected_sources) > 0:
         max_val = source_data["clients"].max()
         min_val = source_data["clients"].min()
         
-        # Calculate trend (simple linear regression slope)
-        if len(source_data) > 1:
-            from scipy import stats
-            x = np.arange(len(source_data))
-            y = source_data["clients"].values
-            slope, _, _, _, _ = stats.linregress(x, y)
-            trend = "📈" if slope > 0.5 else "📉" if slope < -0.5 else "➡️"
+        # Calculate trend (simple comparison of first half vs second half)
+        if len(source_data) > 2:
+            values = source_data["clients"].values
+            mid = len(values) // 2
+            first_half_avg = np.mean(values[:mid])
+            second_half_avg = np.mean(values[mid:])
+            
+            # Compare averages to determine trend
+            change_percent = ((second_half_avg - first_half_avg) / first_half_avg * 100) if first_half_avg > 0 else 0
+            trend = "📈" if change_percent > 10 else "📉" if change_percent < -10 else "➡️"
         else:
             trend = "➡️"
         
