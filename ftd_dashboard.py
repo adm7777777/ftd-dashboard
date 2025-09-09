@@ -172,6 +172,10 @@ with st.sidebar:
     )
 
     chart_type = st.radio("Chart type", ["Line", "Stacked bars"], horizontal=True)
+    
+    st.markdown("---")
+    st.subheader("Display Options")
+    show_total = st.checkbox("Show Total (All Sources)", value=True, help="Display a line showing the total across all selected sources")
 
 # Apply filters
 mask_time = (df["ftd_month"] >= pd.Timestamp(start)) & (df["ftd_month"] <= pd.Timestamp(end))
@@ -248,15 +252,36 @@ import altair as alt
 
 alt.data_transformers.disable_max_rows()
 
-chart_base = alt.Chart(counts).encode(
+# Prepare data for chart
+chart_data = counts.copy()
+
+# Add total line if requested
+if show_total and len(selected_sources) > 1:
+    # Calculate monthly totals
+    monthly_totals = counts.groupby("ftd_month")["clients"].sum().reset_index()
+    monthly_totals[source_col] = "📊 TOTAL"
+    
+    # Combine with original data
+    chart_data = pd.concat([counts, monthly_totals], ignore_index=True)
+    
+    # Adjust color scale to highlight total
+    color_scale = alt.Scale(
+        domain=selected_sources + ["📊 TOTAL"],
+        range=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"][:len(selected_sources)] + ["#ff0000"]
+    )
+else:
+    color_scale = None
+
+chart_base = alt.Chart(chart_data).encode(
     x=alt.X("ftd_month:T", 
             axis=alt.Axis(title="Month", format="%b %Y"),
             scale=alt.Scale(padding=20)),
     y=alt.Y("clients:Q", 
             axis=alt.Axis(title="Clients"), 
-            stack=None if chart_type == "Line" else "zero"),
+            stack=None if chart_type == "Line" or (show_total and len(selected_sources) > 1) else "zero"),
     color=alt.Color(f"{source_col}:N", 
-                   legend=alt.Legend(title="Source")),
+                   legend=alt.Legend(title="Source"),
+                   scale=color_scale),
     tooltip=[
         alt.Tooltip("ftd_month:T", title="Month", format="%B %Y"),
         alt.Tooltip(f"{source_col}:N", title="Source"),
@@ -266,8 +291,31 @@ chart_base = alt.Chart(counts).encode(
 
 if chart_type == "Line":
     # Create line with visible points for better hover experience
-    line = chart_base.mark_line(strokeWidth=2, opacity=0.8)
-    points = chart_base.mark_circle(size=50, opacity=1)
+    # Make TOTAL line thicker if present
+    if show_total and len(selected_sources) > 1:
+        line = chart_base.mark_line().encode(
+            strokeWidth=alt.condition(
+                alt.datum[source_col] == "📊 TOTAL",
+                alt.value(4),  # Thicker line for total
+                alt.value(2)   # Normal line for sources
+            ),
+            opacity=alt.condition(
+                alt.datum[source_col] == "📊 TOTAL",
+                alt.value(1),    # Full opacity for total
+                alt.value(0.7)   # Slightly transparent for sources
+            )
+        )
+        points = chart_base.mark_circle().encode(
+            size=alt.condition(
+                alt.datum[source_col] == "📊 TOTAL",
+                alt.value(70),   # Bigger points for total
+                alt.value(40)    # Normal points for sources
+            ),
+            opacity=alt.value(1)
+        )
+    else:
+        line = chart_base.mark_line(strokeWidth=2, opacity=0.8)
+        points = chart_base.mark_circle(size=50, opacity=1)
     
     # Add hover selection for highlighting
     hover = alt.selection_point(
@@ -278,7 +326,7 @@ if chart_type == "Line":
     )
     
     # Create a vertical rule at hover position
-    rules = alt.Chart(counts).mark_rule(color="gray", strokeDash=[3, 3], opacity=0.5).encode(
+    rules = alt.Chart(chart_data).mark_rule(color="gray", strokeDash=[3, 3], opacity=0.5).encode(
         x="ftd_month:T"
     ).transform_filter(hover)
     
@@ -301,6 +349,14 @@ st.altair_chart(chart.properties(height=380).interactive(), use_container_width=
 # Pivot table
 st.markdown("### Table: counts by month")
 pivot = counts.pivot_table(index="ftd_month", columns=source_col, values="clients", fill_value=0).sort_index()
+
+# Add total column if more than one source
+if len(selected_sources) > 1:
+    pivot["📊 TOTAL"] = pivot.sum(axis=1)
+    
+# Format the index to show month names
+pivot.index = pivot.index.strftime("%b %Y")
+
 st.dataframe(pivot, width="stretch")
 
 # Source Performance Ranking
