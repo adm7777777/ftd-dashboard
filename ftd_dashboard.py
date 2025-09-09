@@ -121,10 +121,12 @@ with st.expander("📊 Data Quality Report", expanded=True):
     st.dataframe(monthly_df, hide_index=True, width="stretch")
 
 # --- Sidebar filters ---
+source_col = "portal - source_marketing_campaign"
+group_sources = False  # Initialize here so it's available outside sidebar
+
 with st.sidebar:
     st.header("Filters")
     # Source selection
-    source_col = "portal - source_marketing_campaign"
     totals = df.groupby(source_col, dropna=False)["Record ID"].size().sort_values(ascending=False)
     all_sources = totals.index.tolist()
     
@@ -222,6 +224,16 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("Display Options")
     show_total = st.checkbox("Show Total (All Sources)", value=True, help="Display a line showing the total across all selected sources")
+    
+    # Source grouping option
+    group_sources = st.checkbox("Group Sources by Type", value=False, 
+                                help="Group sources into IB, Organic (Unknown), and Marketing categories")
+    
+    if group_sources:
+        st.caption("📊 **Grouping Logic:**")
+        st.caption("• **IB**: Sources containing 'IB' in the name")
+        st.caption("• **Organic**: Unknown sources")
+        st.caption("• **Marketing**: All other sources")
 
 # Apply filters
 mask_time = (df["ftd_month"] >= pd.Timestamp(start)) & (df["ftd_month"] <= pd.Timestamp(end))
@@ -231,20 +243,60 @@ dff = df.loc[mask_time & mask_source].copy()
 # Also get data for ALL sources in the timeframe (for active sources calculation)
 dff_all_sources = df.loc[mask_time].copy()
 
+# Function to categorize sources
+def categorize_source(source_name):
+    """Categorize source into IB, Organic, or Marketing"""
+    source_lower = source_name.lower()
+    if 'ib' in source_lower:
+        return '🏦 IB Sources'
+    elif source_lower in ['(unknown)', 'unknown']:
+        return '🌱 Organic'
+    else:
+        return '📢 Marketing'
+
 # Aggregate
-counts = (
-    dff.groupby(["ftd_month", source_col])["Record ID"].size().reset_index(name="clients")
-)
-months = pd.period_range(dff["ftd_month"].min(), dff["ftd_month"].max(), freq="M").to_timestamp()
-# Ensure all (month, source) combos exist for proper stacking/lines
-full = (
-    pd.MultiIndex.from_product([months, selected_sources], names=["ftd_month", source_col])
-    .to_frame(index=False)
-)
-counts = (
-    full.merge(counts, on=["ftd_month", source_col], how="left")
-    .fillna({"clients": 0})
-)
+if group_sources:
+    # Add source category column
+    dff['source_category'] = dff[source_col].apply(categorize_source)
+    
+    # Group by category instead of individual source
+    counts = (
+        dff.groupby(["ftd_month", "source_category"])["Record ID"].size().reset_index(name="clients")
+    )
+    counts.rename(columns={"source_category": source_col}, inplace=True)
+    
+    # Get unique categories from selected sources
+    selected_categories = dff['source_category'].unique().tolist()
+    
+    months = pd.period_range(dff["ftd_month"].min(), dff["ftd_month"].max(), freq="M").to_timestamp()
+    # Ensure all (month, category) combos exist
+    full = (
+        pd.MultiIndex.from_product([months, selected_categories], names=["ftd_month", source_col])
+        .to_frame(index=False)
+    )
+    counts = (
+        full.merge(counts, on=["ftd_month", source_col], how="left")
+        .fillna({"clients": 0})
+    )
+    
+    # Update selected_sources to be categories for display purposes
+    display_sources = selected_categories
+else:
+    # Original aggregation by individual source
+    counts = (
+        dff.groupby(["ftd_month", source_col])["Record ID"].size().reset_index(name="clients")
+    )
+    months = pd.period_range(dff["ftd_month"].min(), dff["ftd_month"].max(), freq="M").to_timestamp()
+    # Ensure all (month, source) combos exist for proper stacking/lines
+    full = (
+        pd.MultiIndex.from_product([months, selected_sources], names=["ftd_month", source_col])
+        .to_frame(index=False)
+    )
+    counts = (
+        full.merge(counts, on=["ftd_month", source_col], how="left")
+        .fillna({"clients": 0})
+    )
+    display_sources = selected_sources
 
 # KPI row
 total_clients = int(counts["clients"].sum())
@@ -267,12 +319,15 @@ k2.metric("Avg/Month", f"{avg_monthly:.0f}")
 k3.metric("Active Sources", f"{active_sources_in_period} / {total_sources_with_data}", 
           f"{active_percentage:.1f}% active",
           help="Sources with ≥1 client in selected timeframe (across ALL sources)")
-k4.metric("Selected", f"{len(selected_sources)} / {len(all_sources)}",
+k4.metric("Selected" if not group_sources else "Categories", 
+          f"{len(display_sources)} / {len(all_sources) if not group_sources else 3}",
           help="Sources currently selected for display")
 k5.metric("Period", f"{span_months} months")
 
 # Add info about what's being displayed
-if len(selected_sources) < len(all_sources):
+if group_sources:
+    st.info(f"📊 **Viewing grouped data:** {', '.join(display_sources)}")
+elif len(selected_sources) < len(all_sources):
     if len(selected_sources) == 1:
         st.info(f"📌 **Viewing data for 1 source:** {selected_sources[0]}")
     else:
@@ -325,7 +380,7 @@ alt.data_transformers.disable_max_rows()
 chart_data = counts.copy()
 
 # Add total line if requested
-if show_total and len(selected_sources) > 1:
+if show_total and (len(display_sources) > 1 or group_sources):
     # Calculate monthly totals
     monthly_totals = counts.groupby("ftd_month")["clients"].sum().reset_index()
     monthly_totals[source_col] = "📊 TOTAL"
@@ -333,13 +388,37 @@ if show_total and len(selected_sources) > 1:
     # Combine with original data
     chart_data = pd.concat([counts, monthly_totals], ignore_index=True)
     
-    # Adjust color scale to highlight total
-    color_scale = alt.Scale(
-        domain=selected_sources + ["📊 TOTAL"],
-        range=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"][:len(selected_sources)] + ["#ff0000"]
-    )
+    # Adjust color scale
+    if group_sources:
+        # Use specific colors for grouped categories
+        color_mapping = {
+            '🏦 IB Sources': '#4CAF50',  # Green for IB
+            '🌱 Organic': '#2196F3',      # Blue for Organic
+            '📢 Marketing': '#FF9800',     # Orange for Marketing
+            '📊 TOTAL': '#ff0000'          # Red for Total
+        }
+        domain = display_sources + ["📊 TOTAL"]
+        range_colors = [color_mapping.get(s, '#808080') for s in domain]
+        color_scale = alt.Scale(domain=domain, range=range_colors)
+    else:
+        # Original color scale for individual sources
+        color_scale = alt.Scale(
+            domain=display_sources + ["📊 TOTAL"],
+            range=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"][:len(display_sources)] + ["#ff0000"]
+        )
 else:
-    color_scale = None
+    if group_sources:
+        # Use specific colors for grouped categories without total
+        color_mapping = {
+            '🏦 IB Sources': '#4CAF50',  # Green for IB
+            '🌱 Organic': '#2196F3',      # Blue for Organic
+            '📢 Marketing': '#FF9800'      # Orange for Marketing
+        }
+        domain = display_sources
+        range_colors = [color_mapping.get(s, '#808080') for s in domain]
+        color_scale = alt.Scale(domain=domain, range=range_colors)
+    else:
+        color_scale = None
 
 chart_base = alt.Chart(chart_data).encode(
     x=alt.X("ftd_month:T", 
@@ -417,10 +496,13 @@ st.altair_chart(chart.properties(height=380).interactive(), use_container_width=
 
 # Pivot table
 st.markdown("### Table: counts by month")
+if group_sources:
+    st.caption("📊 Data grouped by category (IB / Organic / Marketing)")
+    
 pivot = counts.pivot_table(index="ftd_month", columns=source_col, values="clients", fill_value=0).sort_index()
 
-# Add total column if more than one source
-if len(selected_sources) > 1:
+# Add total column if more than one source/category
+if len(display_sources) > 1:
     pivot["📊 TOTAL"] = pivot.sum(axis=1)
     
 # Format the index to show month names
@@ -429,12 +511,15 @@ pivot.index = pivot.index.strftime("%b %Y")
 st.dataframe(pivot, width="stretch")
 
 # Source Performance Ranking
-if len(selected_sources) > 0:
+if len(display_sources) > 0:
     st.markdown("### Source Performance Ranking")
+    
+    if group_sources:
+        st.info("📊 Showing performance for grouped categories")
     
     # Calculate source statistics
     source_stats = []
-    for source in selected_sources:
+    for source in display_sources:
         source_data = counts[counts[source_col] == source]
         total = source_data["clients"].sum()
         avg = source_data["clients"].mean()
@@ -454,8 +539,9 @@ if len(selected_sources) > 0:
         else:
             trend = "➡️"
         
+        label = "Category" if group_sources else "Source"
         source_stats.append({
-            "Source": source,
+            label: source,
             "Total Clients": int(total),
             "Avg/Month": f"{avg:.1f}",
             "Best Month": int(max_val),
@@ -499,7 +585,7 @@ with col2:
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         pivot.reset_index().to_excel(writer, sheet_name='Monthly Data', index=False)
-        if len(selected_sources) > 0:
+        if len(display_sources) > 0:
             source_df.to_excel(writer, sheet_name='Source Rankings', index=False)
     excel_bytes = buffer.getvalue()
     st.download_button(
@@ -517,10 +603,10 @@ with col3:
         "summary": {
             "total_clients": total_clients,
             "period": f"{months.min():%Y-%m-%d} to {months.max():%Y-%m-%d}",
-            "sources_count": len(selected_sources)
+            "sources_count": len(display_sources)
         },
         "monthly_data": pivot.reset_index().to_dict(orient="records"),
-        "source_rankings": source_df.to_dict(orient="records") if len(selected_sources) > 0 else []
+        "source_rankings": source_df.to_dict(orient="records") if len(display_sources) > 0 else []
     }
     json_str = json.dumps(json_data, indent=2, default=str)
     st.download_button(
