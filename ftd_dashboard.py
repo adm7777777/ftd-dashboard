@@ -8,6 +8,110 @@ st.set_page_config(page_title="FTD Acquisition Dashboard", layout="wide")
 st.title("FTD Acquisition Dashboard")
 st.caption("Monthly client acquisition by source (campaign / IB), anchored on **portal - ftd_time**. Dates parsed as **DD/MM/YYYY**.")
 
+# --- CSV Format Guide ---
+with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
+    st.markdown("### Required CSV Fields")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### 1️⃣ `portal - ftd_time` (Required)")
+        st.markdown("""
+        - **Purpose**: Date when client became FTD
+        - **Format**: DD/MM/YYYY (e.g., "25/08/2024")
+        - **Notes**: Invalid dates will be dropped
+        """)
+        
+        st.markdown("#### 2️⃣ `portal - source_marketing_campaign` (Required)")
+        st.markdown("""
+        - **Purpose**: Source/campaign that brought the client
+        - **Format**: Text string (can be empty for organic)
+        - **Examples**:
+          - "Campaign_Name_2024"
+          - "IB_Partner_Name" 
+          - "Google_Ads_Q1"
+          - Empty/null → "(Unknown)" Organic
+        """)
+    
+    with col2:
+        st.markdown("#### 3️⃣ `Record ID` (Required)")
+        st.markdown("""
+        - **Purpose**: Unique identifier for each client
+        - **Format**: Any unique value (number/text)
+        - **Notes**: Used for counting unique clients
+        """)
+        
+        st.markdown("#### 📊 Source Grouping Logic")
+        st.markdown("""
+        When grouping is enabled:
+        - **🏦 IB Sources**: Contains "IB" in name
+        - **🌱 Organic**: Unknown/empty sources
+        - **📢 Marketing**: All other sources
+        """)
+    
+    st.markdown("---")
+    st.markdown("### Example CSV Structure")
+    
+    # Create sample data
+    sample_data = pd.DataFrame({
+        'Record ID': ['1001', '1002', '1003', '1004', '1005'],
+        'portal - ftd_time': ['15/01/2024', '16/01/2024', '17/01/2024', '18/02/2024', '19/02/2024'],
+        'portal - source_marketing_campaign': ['Google_Campaign_Q1', 'IB_Partner_John', '', 'Facebook_Ads_2024', 'IB_Sarah_Team'],
+        'Other_Field_1': ['value1', 'value2', 'value3', 'value4', 'value5'],
+        'Other_Field_2': ['data1', 'data2', 'data3', 'data4', 'data5']
+    })
+    
+    st.dataframe(sample_data, hide_index=True, width="stretch")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # Download sample CSV template
+        csv_template = sample_data.to_csv(index=False)
+        st.download_button(
+            "📥 Download Sample CSV Template",
+            data=csv_template,
+            file_name="ftd_template.csv",
+            mime="text/csv",
+            use_container_width=True,
+            help="Download a sample CSV with the correct format"
+        )
+    
+    with col2:
+        st.info("💡 **Tip**: Column names must match exactly (including spaces)")
+    
+    with col3:
+        st.warning("⚠️ **Note**: Each row = one unique client/FTD")
+    
+    st.markdown("---")
+    st.markdown("### Common Issues & Solutions")
+    
+    issues_col1, issues_col2 = st.columns(2)
+    
+    with issues_col1:
+        st.markdown("""
+        **❌ Issue: Dates not parsing correctly**
+        - ✅ Solution: Use DD/MM/YYYY format (e.g., 25/12/2024)
+        - ❌ Avoid: MM/DD/YYYY or YYYY-MM-DD formats
+        
+        **❌ Issue: Missing required columns**
+        - ✅ Solution: Ensure column names match exactly
+        - ✅ Include spaces: `portal - ftd_time`
+        - ❌ Avoid: `portal-ftd_time` (no spaces)
+        """)
+    
+    with issues_col2:
+        st.markdown("""
+        **❌ Issue: No data showing in chart**
+        - ✅ Solution: Check date range filter
+        - ✅ Solution: Verify sources are selected
+        - ✅ Solution: Check Data Quality Report for issues
+        
+        **❌ Issue: Sources showing as "(Unknown)"**
+        - This happens when source field is empty
+        - These are treated as Organic traffic
+        """)
+
 # --- Load data ---
 uploaded = st.file_uploader("Upload CSV (must include 'portal - ftd_time' and 'portal - source_marketing_campaign')", type=["csv"])
 
@@ -49,11 +153,12 @@ else:
         df = load_df("source.csv")
         st.info("Using local 'source.csv' found in the same folder (since you didn't upload a file here).")
     except Exception:
-        st.warning("Please upload your CSV to proceed.")
-        st.stop()
+    st.warning("Please upload your CSV to proceed. Check the 📚 CSV Format Guide above for requirements.")
+    st.info("💡 Need help? Expand the CSV Format Guide above to see the required format and download a sample template.")
+    st.stop()
 
 # Data Quality Check
-with st.expander("📊 Data Quality Report", expanded=True):
+with st.expander("📊 Data Quality Report", expanded=False):
     date_col = "portal - ftd_time"
     source_col = "portal - source_marketing_campaign"
     
@@ -617,10 +722,35 @@ with col3:
         use_container_width=True
     )
 
+# Footer with quick reference
+with st.expander("ℹ️ Quick Reference", expanded=False):
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("""
+        **📅 Date Processing**
+        - Format: DD/MM/YYYY
+        - Field: `portal - ftd_time`
+        - Invalid dates are dropped
+        """)
+    
+    with col2:
+        st.markdown("""
+        **📊 Source Categories**
+        - IB: Contains "IB" in name
+        - Organic: Unknown/empty
+        - Marketing: All others
+        """)
+    
+    with col3:
+        st.markdown("""
+        **📈 Metrics**
+        - Each row = 1 client
+        - Grouped by month
+        - Filtered by date range
+        """)
+
 st.caption("""
-Notes:
-- Dates parsed with `dayfirst=True` (DD/MM/YYYY).
-- Uses only `portal - ftd_time` as requested.
-- "Source" = `portal - source_marketing_campaign` (campaign or IB). 
-- All contacts are assumed FTDs; the chart counts clients (rows) per month per source.
+Notes: Dates parsed with `dayfirst=True` (DD/MM/YYYY). Uses only `portal - ftd_time` as requested.
+"Source" = `portal - source_marketing_campaign` (campaign or IB). All contacts are assumed FTDs; the chart counts clients (rows) per month per source.
 """)
