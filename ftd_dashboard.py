@@ -182,6 +182,9 @@ mask_time = (df["ftd_month"] >= pd.Timestamp(start)) & (df["ftd_month"] <= pd.Ti
 mask_source = df[source_col].isin(selected_sources) if selected_sources else pd.Series(True, index=df.index)
 dff = df.loc[mask_time & mask_source].copy()
 
+# Also get data for ALL sources in the timeframe (for active sources calculation)
+dff_all_sources = df.loc[mask_time].copy()
+
 # Aggregate
 counts = (
     dff.groupby(["ftd_month", source_col])["Record ID"].size().reset_index(name="clients")
@@ -202,12 +205,24 @@ total_clients = int(counts["clients"].sum())
 span_months = len(months)
 avg_monthly = total_clients / span_months if span_months > 0 else 0
 
+# Calculate active sources (sources with at least 1 client in the timeframe)
+# Get unique sources that have data in the filtered timeframe (across ALL sources, not just selected)
+sources_with_clients_in_period = dff_all_sources.groupby(source_col)["Record ID"].size()
+active_sources_in_period = len(sources_with_clients_in_period[sources_with_clients_in_period > 0])
+total_sources_with_data = df[source_col].nunique()
+active_percentage = (active_sources_in_period / total_sources_with_data * 100) if total_sources_with_data > 0 else 0
+
 st.markdown("### Overview")
-k1, k2, k3, k4 = st.columns(4)
+k1, k2, k3, k4, k5 = st.columns(5)
+
 k1.metric("Total Clients", f"{total_clients:,}")
 k2.metric("Avg/Month", f"{avg_monthly:.0f}")
-k3.metric("Sources", f"{len(selected_sources)} / {len(all_sources)}")
-k4.metric("Period", f"{span_months} months")
+k3.metric("Active Sources", f"{active_sources_in_period} / {total_sources_with_data}", 
+          f"{active_percentage:.1f}% active",
+          help="Sources with ≥1 client in selected timeframe")
+k4.metric("Selected", f"{len(selected_sources)} / {len(all_sources)}",
+          help="Sources currently selected for display")
+k5.metric("Period", f"{span_months} months")
 
 # Performance Metrics
 if len(counts) > 0 and span_months > 1:
