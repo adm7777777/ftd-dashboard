@@ -108,12 +108,16 @@ with st.expander("📊 Data Quality Report", expanded=True):
             st.warning(f"⚠️ {missing_months} months with no data")
     
     # Show monthly breakdown for verification
-    st.markdown("#### Monthly Record Count")
+    st.markdown("#### Monthly Record Count (All Sources)")
     monthly_counts = df.groupby(df['ftd_month'].dt.to_period('M'))['Record ID'].count().sort_index()
     monthly_df = pd.DataFrame({
         'Month': monthly_counts.index.strftime('%B %Y'),
-        'Records': monthly_counts.values
+        'All Sources': monthly_counts.values
     })
+    
+    # Add a note about filtering
+    st.info("💡 **Note:** This table shows ALL records in your data. The chart below only shows records from your SELECTED sources. If you've selected fewer sources, the chart numbers will be lower.")
+    
     st.dataframe(monthly_df, hide_index=True, width="stretch")
 
 # --- Sidebar filters ---
@@ -257,14 +261,22 @@ active_percentage = (active_sources_in_period / total_sources_with_data * 100) i
 st.markdown("### Overview")
 k1, k2, k3, k4, k5 = st.columns(5)
 
-k1.metric("Total Clients", f"{total_clients:,}")
+k1.metric("Total Clients", f"{total_clients:,}",
+          help="Total clients from SELECTED sources only")
 k2.metric("Avg/Month", f"{avg_monthly:.0f}")
 k3.metric("Active Sources", f"{active_sources_in_period} / {total_sources_with_data}", 
           f"{active_percentage:.1f}% active",
-          help="Sources with ≥1 client in selected timeframe")
+          help="Sources with ≥1 client in selected timeframe (across ALL sources)")
 k4.metric("Selected", f"{len(selected_sources)} / {len(all_sources)}",
           help="Sources currently selected for display")
 k5.metric("Period", f"{span_months} months")
+
+# Add info about what's being displayed
+if len(selected_sources) < len(all_sources):
+    if len(selected_sources) == 1:
+        st.info(f"📌 **Viewing data for 1 source:** {selected_sources[0]}")
+    else:
+        st.info(f"📌 **Viewing data for {len(selected_sources)} selected sources.** Select more sources in the sidebar to see additional data.")
 
 # Performance Metrics
 if len(counts) > 0 and span_months > 1:
