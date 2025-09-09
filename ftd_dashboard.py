@@ -14,15 +14,27 @@ uploaded = st.file_uploader("Upload CSV (must include 'portal - ftd_time' and 'p
 @st.cache_data(show_spinner=False)
 def load_df(file):
     df = pd.read_csv(file)
+    original_count = len(df)
+    
     # Expected columns
     date_col = "portal - ftd_time"
     source_col = "portal - source_marketing_campaign"
     if date_col not in df.columns or source_col not in df.columns:
         raise ValueError(f"CSV is missing required columns: '{date_col}' and '{source_col}'. Found: {list(df.columns)}")
+    
+    # Count before date parsing
     df[date_col] = pd.to_datetime(df[date_col], dayfirst=True, errors="coerce")
+    invalid_dates = df[date_col].isna().sum()
+    
     df[source_col] = df[source_col].fillna("(Unknown)").astype(str).str.strip()
     df = df.dropna(subset=[date_col]).copy()
     df["ftd_month"] = df[date_col].dt.to_period("M").dt.to_timestamp()
+    
+    # Store diagnostic info
+    df.attrs['original_count'] = original_count
+    df.attrs['invalid_dates'] = invalid_dates
+    df.attrs['final_count'] = len(df)
+    
     return df
 
 if uploaded is not None:
@@ -41,27 +53,50 @@ else:
         st.stop()
 
 # Data Quality Check
-with st.expander("📊 Data Quality Report", expanded=False):
+with st.expander("📊 Data Quality Report", expanded=True):
     date_col = "portal - ftd_time"
     source_col = "portal - source_marketing_campaign"
     
+    # Show loading diagnostics
+    st.markdown("#### Data Loading Summary")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Records in CSV", f"{df.attrs.get('original_count', len(df)):,}")
+    
+    with col2:
+        dropped = df.attrs.get('invalid_dates', 0)
+        st.metric("Invalid Dates Dropped", f"{dropped:,}",
+                  f"-{dropped/df.attrs.get('original_count', 1)*100:.1f}%" if dropped > 0 else None,
+                  delta_color="inverse" if dropped > 0 else "off")
+    
+    with col3:
+        st.metric("Valid Records", f"{df.attrs.get('final_count', len(df)):,}")
+    
+    with col4:
+        retention = (df.attrs.get('final_count', len(df)) / df.attrs.get('original_count', len(df)) * 100) if df.attrs.get('original_count', 1) > 0 else 100
+        st.metric("Data Retention", f"{retention:.1f}%")
+    
+    if df.attrs.get('invalid_dates', 0) > 0:
+        st.warning(f"⚠️ **{df.attrs.get('invalid_dates', 0)} records were dropped** due to invalid dates in 'portal - ftd_time' column. These dates could not be parsed as DD/MM/YYYY format.")
+    
+    st.markdown("#### Data Quality Metrics")
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("Total Records", f"{len(df):,}")
-        invalid_dates = df[date_col].isna().sum()
-        if invalid_dates > 0:
-            st.warning(f"⚠️ {invalid_dates} records with invalid dates")
-        else:
-            st.success("✅ All dates valid")
+        st.metric("Date Range", f"{df['ftd_month'].min():%b %Y} - {df['ftd_month'].max():%b %Y}")
+        # Show sample dates for verification
+        sample_dates = df[date_col].dropna().head(3)
+        if len(sample_dates) > 0:
+            st.caption("Sample parsed dates:")
+            for d in sample_dates:
+                st.caption(f"  • {d:%d/%m/%Y}")
     
     with col2:
-        st.metric("Date Range", f"{df['ftd_month'].min():%b %Y} - {df['ftd_month'].max():%b %Y}")
         unknown_sources = (df[source_col] == "(Unknown)").sum()
+        st.metric("Unknown Sources", f"{unknown_sources:,}")
         if unknown_sources > 0:
             st.warning(f"⚠️ {unknown_sources} records with unknown source")
-        else:
-            st.success("✅ All sources identified")
     
     with col3:
         st.metric("Unique Sources", f"{df[source_col].nunique()}")
@@ -71,8 +106,15 @@ with st.expander("📊 Data Quality Report", expanded=False):
         missing_months = len(expected_months) - len(actual_months)
         if missing_months > 0:
             st.warning(f"⚠️ {missing_months} months with no data")
-        else:
-            st.success("✅ No gaps in data")
+    
+    # Show monthly breakdown for verification
+    st.markdown("#### Monthly Record Count")
+    monthly_counts = df.groupby(df['ftd_month'].dt.to_period('M'))['Record ID'].count().sort_index()
+    monthly_df = pd.DataFrame({
+        'Month': monthly_counts.index.strftime('%B %Y'),
+        'Records': monthly_counts.values
+    })
+    st.dataframe(monthly_df, hide_index=True, width="stretch")
 
 # --- Sidebar filters ---
 with st.sidebar:
