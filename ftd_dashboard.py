@@ -153,9 +153,9 @@ else:
         df = load_df("source.csv")
         st.info("Using local 'source.csv' found in the same folder (since you didn't upload a file here).")
     except Exception:
-    st.warning("Please upload your CSV to proceed. Check the 📚 CSV Format Guide above for requirements.")
-    st.info("💡 Need help? Expand the CSV Format Guide above to see the required format and download a sample template.")
-    st.stop()
+        st.warning("Please upload your CSV to proceed. Check the 📚 CSV Format Guide above for requirements.")
+        st.info("💡 Need help? Expand the CSV Format Guide above to see the required format and download a sample template.")
+        st.stop()
 
 # Data Quality Check
 with st.expander("📊 Data Quality Report", expanded=False):
