@@ -1056,17 +1056,21 @@ else:
 st.markdown("### Table: counts by month")
 if group_sources:
     st.caption("📊 Data grouped by category (IB / Organic / Marketing)")
-    
-pivot = counts.pivot_table(index="ftd_month", columns=source_col, values="clients", fill_value=0).sort_index()
 
-# Add total column if more than one source/category
-if len(display_sources) > 1:
-    pivot["📊 TOTAL"] = pivot.sum(axis=1)
-    
-# Format the index to show month names
-pivot.index = pivot.index.strftime("%b %Y")
+if len(counts) > 0:
+    pivot = counts.pivot_table(index="ftd_month", columns=source_col, values="clients", fill_value=0).sort_index()
 
-st.dataframe(pivot, width="stretch")
+    # Add total column if more than one source/category
+    if len(display_sources) > 1:
+        pivot["📊 TOTAL"] = pivot.sum(axis=1)
+    
+    # Format the index to show month names (only if index is datetime)
+    if len(pivot) > 0 and hasattr(pivot.index, 'strftime'):
+        pivot.index = pivot.index.strftime("%b %Y")
+
+    st.dataframe(pivot, width="stretch")
+else:
+    st.info("No data available to display in the table. Please check your filters and data quality.")
 
 # Source Performance Ranking
 if len(display_sources) > 0:
