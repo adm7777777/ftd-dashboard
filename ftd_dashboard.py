@@ -847,7 +847,7 @@ else:
     display_sources = selected_sources
 
 # KPI row
-total_clients = int(counts["clients"].sum())
+total_clients = safe_int_convert(counts["clients"].sum() if len(counts) > 0 else 0)
 span_months = len(months)
 avg_monthly = total_clients / span_months if span_months > 0 else 0
 
@@ -1104,6 +1104,9 @@ if len(display_sources) > 0:
         avg = source_data["clients"].mean()
         max_val = source_data["clients"].max()
         min_val = source_data["clients"].min()
+        
+        # Debug info
+        print(f"DEBUG: source={source}, max_val={max_val} (type: {type(max_val)}), min_val={min_val} (type: {type(min_val)})")
         
         # Calculate trend (simple comparison of first half vs second half)
         if len(source_data) > 2:
