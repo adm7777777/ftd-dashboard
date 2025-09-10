@@ -263,10 +263,10 @@ def parse_dd_mm_yyyy_date(date_str, debug=False):
                 print(f"  Null/NaT value detected: '{date_str}'")
             return pd.NaT
             
-        # Handle 1/1/1970 placeholder dates
-        if '1970' in date_str or '1/1/1970' in date_str:
+        # Handle 1/1/1970 placeholder dates (means "no FTD yet")
+        if date_str == '1/1/1970' or date_str == '01/01/1970' or date_str == '1/01/1970':
             if debug:
-                print(f"  Skipping placeholder date: {date_str}")
+                print(f"  Skipping placeholder date (no FTD): {date_str}")
             return pd.NaT
             
         # Remove time component if present
@@ -342,8 +342,18 @@ def load_df(file):
                 debug_info.append(f"  Found: {repr(col)}")
                 debug_info.append(f"    Sample values: {df[col].head(3).tolist()}")
     
+    # Add summary of placeholder dates
+    placeholder_count = 0
+    if ftd_col in df.columns:
+        placeholder_count = df[ftd_col].isin(['1/1/1970', '01/01/1970', '1/01/1970']).sum()
+        debug_info.append(f"\n📊 FTD DATA SUMMARY:")
+        debug_info.append(f"  Total records: {len(df)}")
+        debug_info.append(f"  Placeholder dates (1/1/1970): {placeholder_count}")
+        debug_info.append(f"  Potential FTD records: {len(df) - placeholder_count}")
+    
     # Store debug info for display
     df.attrs['debug_info'] = '\n'.join(debug_info)
+    df.attrs['placeholder_count'] = placeholder_count
     
     # Also print to console
     print('\n'.join(debug_info))
@@ -431,7 +441,11 @@ def load_df(file):
     
     # Show parsing success rate BEFORE filtering
     valid_dates_before_filter = df[ftd_date_col].notna().sum()
-    print(f'📊 Parsed {valid_dates_before_filter} out of {len(df)} FTD dates before date range filtering')
+    placeholder_dates = len(df) - valid_dates_before_filter
+    print(f'📊 FTD Parsing Results:')
+    print(f'  - Valid FTD dates parsed: {valid_dates_before_filter}')
+    print(f'  - Placeholder/No FTD (1/1/1970): {placeholder_dates}')
+    print(f'  - Total records: {len(df)}')
     
     # Mark dates before 2023 or after reasonable future as invalid
     min_valid_date = pd.Timestamp('2023-01-01')
@@ -537,20 +551,19 @@ with st.expander("📊 Data Quality Report", expanded=False):
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Records in CSV", f"{df.attrs.get('original_count', len(df)):,}")
+        st.metric("Total Leads", f"{df.attrs.get('original_count', len(df)):,}")
     
     with col2:
-        dropped = df.attrs.get(invalid_dates_key, 0)
-        before_2023_key = 'ftd_before_2023' if dashboard_type == "FTD Dashboard" else 'kyc_before_2023'
-        before_2023 = df.attrs.get(before_2023_key, 0)
-        st.metric("Invalid Dates", f"{dropped:,}",
-                  f"Incl. {before_2023:,} before 2023" if before_2023 > 0 else f"{dropped/df.attrs.get('original_count', 1)*100:.1f}%",
-                  delta_color="inverse" if dropped > 0 else "off")
+        placeholder_count = df.attrs.get('placeholder_count', 0)
+        st.metric("No FTD Yet", f"{placeholder_count:,}",
+                  "1/1/1970 placeholders",
+                  delta_color="off")
     
     with col3:
         # Count valid records for this dashboard (non-null dates)
         valid_records = df[active_date_col].notna().sum()
-        st.metric("Valid Records", f"{valid_records:,}")
+        st.metric("With FTD", f"{valid_records:,}",
+                  f"{valid_records/df.attrs.get('original_count', 1)*100:.1f}% conversion")
     
     with col4:
         retention = (valid_records / df.attrs.get('original_count', len(df)) * 100) if df.attrs.get('original_count', 1) > 0 else 100
