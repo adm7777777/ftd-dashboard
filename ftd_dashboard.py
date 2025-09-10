@@ -545,7 +545,7 @@ chart_base = alt.Chart(chart_data).encode(
 if chart_type == "Line":
     # Create line with visible points for better hover experience
     # Make TOTAL line thicker if present
-    if show_total and len(selected_sources) > 1:
+    if show_total and ("📊 TOTAL" in chart_data[source_col].values):
         line = chart_base.mark_line().encode(
             strokeWidth=alt.condition(
                 alt.datum[source_col] == "📊 TOTAL",
@@ -597,7 +597,10 @@ else:
     )
 
 st.markdown("### Monthly acquisition by source")
-st.altair_chart(chart.properties(height=380).interactive(), use_container_width=True)
+if not chart_data.empty:
+    st.altair_chart(chart.properties(height=380).interactive(), use_container_width=True)
+else:
+    st.info("No data to display. Please select at least one source from the sidebar.")
 
 # Pivot table
 st.markdown("### Table: counts by month")
