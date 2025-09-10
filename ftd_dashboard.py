@@ -317,27 +317,36 @@ def load_df(file):
     df = pd.read_csv(file, dtype=str)
     original_count = len(df)
     
+    # Create debug info to show in UI
+    debug_info = []
+    
     # Just show me the first 5 rows of the ENTIRE CSV as-is
-    print("📄 RAW CSV DATA - First 5 rows:")
-    print(df.head().to_string())
+    debug_info.append("📄 RAW CSV DATA - First 5 rows:")
+    debug_info.append(df.head().to_string())
     
     # Show EXACT column names (check for extra spaces/characters)  
-    print(f"\n📋 EXACT column names: {[repr(col) for col in df.columns]}")
+    debug_info.append(f"\n📋 EXACT column names: {[repr(col) for col in df.columns]}")
     
     # Show first 10 values from the FTD column exactly as they appear
     ftd_col = 'portal - ftd_time'
     if ftd_col in df.columns:
-        print(f"\n📅 First 10 values from '{ftd_col}':")
+        debug_info.append(f"\n📅 First 10 values from '{ftd_col}':")
         for i in range(min(10, len(df))):
             val = df[ftd_col].iloc[i]
-            print(f"  Row {i+1}: {repr(val)}")
+            debug_info.append(f"  Row {i+1}: {repr(val)}")
     else:
-        print(f"\n❌ Column '{ftd_col}' not found!")
-        print("Looking for columns containing 'ftd':")
+        debug_info.append(f"\n❌ Column '{ftd_col}' not found!")
+        debug_info.append("Looking for columns containing 'ftd':")
         for col in df.columns:
             if 'ftd' in col.lower():
-                print(f"  Found: {repr(col)}")
-                print(f"    Sample values: {df[col].head(3).tolist()}")
+                debug_info.append(f"  Found: {repr(col)}")
+                debug_info.append(f"    Sample values: {df[col].head(3).tolist()}")
+    
+    # Store debug info for display
+    df.attrs['debug_info'] = '\n'.join(debug_info)
+    
+    # Also print to console
+    print('\n'.join(debug_info))
     
     # Expected columns - BOTH date columns must be present
     ftd_date_col = "portal - ftd_time"
@@ -487,6 +496,14 @@ def load_df(file):
 if uploaded is not None:
     try:
         df = load_df(uploaded)
+        
+        # Show debug info in an expander RIGHT AFTER LOADING
+        with st.expander("🔍 RAW CSV DEBUG INFO - CLICK HERE TO SEE YOUR DATA", expanded=True):
+            if hasattr(df, 'attrs') and 'debug_info' in df.attrs:
+                st.code(df.attrs['debug_info'], language='text')
+            else:
+                st.error("Debug info not available")
+                
     except Exception as e:
         st.error(str(e))
         st.stop()
