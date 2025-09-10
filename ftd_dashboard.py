@@ -302,6 +302,11 @@ def load_df(file):
     df.attrs['invalid_kyc_dates'] = invalid_kyc_dates
     df.attrs['final_count'] = len(df)
     
+    # Store the actual column names found for later use
+    df.attrs['ftd_date_col'] = ftd_date_col
+    df.attrs['kyc_date_col'] = kyc_date_col
+    df.attrs['source_col'] = source_col
+    
     return df
 
 if uploaded is not None:
@@ -322,15 +327,16 @@ else:
 
 # Data Quality Check
 with st.expander("📊 Data Quality Report", expanded=False):
-    source_col = "portal - source_marketing_campaign"
+    # Get the actual column names from the dataframe attributes
+    source_col = df.attrs.get('source_col', 'portal - source_marketing_campaign')
     
     # Select the appropriate date column and month column based on dashboard
     if dashboard_type == "FTD Dashboard":
-        active_date_col = "portal - ftd_time"
+        active_date_col = df.attrs.get('ftd_date_col', 'portal - ftd_time')
         active_month_col = "ftd_month"
         invalid_dates_key = 'invalid_ftd_dates'
     else:
-        active_date_col = "DATE_CREATED"
+        active_date_col = df.attrs.get('kyc_date_col', 'DATE_CREATED')
         active_month_col = "kyc_month"
         invalid_dates_key = 'invalid_kyc_dates'
     
@@ -490,7 +496,8 @@ with tour_container:
         st.markdown("---")
 
 # --- Sidebar filters ---
-source_col = "portal - source_marketing_campaign"
+# Get the actual source column name from the dataframe
+source_col = df.attrs.get('source_col', 'portal - source_marketing_campaign')
 group_sources = False  # Initialize here so it's available outside sidebar
 
 with st.sidebar:
@@ -664,10 +671,10 @@ with st.sidebar:
 # Use the correct month column based on dashboard type
 if dashboard_type == "FTD Dashboard":
     filter_month_col = "ftd_month"
-    filter_date_col = "portal - ftd_time"
+    filter_date_col = df.attrs.get('ftd_date_col', 'portal - ftd_time')
 else:
     filter_month_col = "kyc_month"
-    filter_date_col = "DATE_CREATED"
+    filter_date_col = df.attrs.get('kyc_date_col', 'DATE_CREATED')
 
 # Filter by selected months (not just range)
 if selected_months:
