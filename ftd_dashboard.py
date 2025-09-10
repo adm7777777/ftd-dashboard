@@ -767,7 +767,23 @@ def categorize_source(source_name):
         return '📢 Marketing'
 
 # Aggregate
-if group_sources:
+if len(dff) == 0:
+    # No data after filtering - create empty dataframe with expected structure
+    months = sorted(selected_months) if selected_months else []
+    if group_sources:
+        # Create empty dataframe for grouped sources
+        display_sources = []
+    else:
+        display_sources = selected_sources
+    
+    # Create empty counts dataframe
+    counts = pd.DataFrame(columns=["ftd_month", source_col, "clients"])
+    if len(months) > 0 and len(display_sources) > 0:
+        # Create structure with zero clients
+        full = pd.MultiIndex.from_product([months, display_sources], names=["ftd_month", source_col]).to_frame(index=False)
+        full["clients"] = 0
+        counts = full
+elif group_sources:
     # Add source category column
     dff['source_category'] = dff[source_col].apply(categorize_source)
     
@@ -783,14 +799,15 @@ if group_sources:
     # Use only selected months, not a continuous range
     months = sorted(selected_months) if selected_months else []
     # Ensure all (month, category) combos exist
-    full = (
-        pd.MultiIndex.from_product([months, selected_categories], names=["month", source_col])
-        .to_frame(index=False)
-    )
-    counts = (
-        full.merge(counts, on=["month", source_col], how="left")
-        .fillna({"clients": 0})
-    )
+    if len(months) > 0 and len(selected_categories) > 0:
+        full = (
+            pd.MultiIndex.from_product([months, selected_categories], names=["month", source_col])
+            .to_frame(index=False)
+        )
+        counts = (
+            full.merge(counts, on=["month", source_col], how="left")
+            .fillna({"clients": 0})
+        )
     # Rename back for consistency
     counts.rename(columns={"month": "ftd_month"}, inplace=True)
     
@@ -807,14 +824,15 @@ else:
     # Use only selected months, not a continuous range
     months = sorted(selected_months) if selected_months else []
     # Ensure all (month, source) combos exist for proper stacking/lines
-    full = (
-        pd.MultiIndex.from_product([months, selected_sources], names=["month", source_col])
-        .to_frame(index=False)
-    )
-    counts = (
-        full.merge(counts, on=["month", source_col], how="left")
-        .fillna({"clients": 0})
-    )
+    if len(months) > 0 and len(selected_sources) > 0:
+        full = (
+            pd.MultiIndex.from_product([months, selected_sources], names=["month", source_col])
+            .to_frame(index=False)
+        )
+        counts = (
+            full.merge(counts, on=["month", source_col], how="left")
+            .fillna({"clients": 0})
+        )
     # Rename back for consistency with rest of code
     counts.rename(columns={"month": "ftd_month"}, inplace=True)
     display_sources = selected_sources
