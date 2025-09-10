@@ -93,8 +93,25 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("FTD Acquisition Dashboard")
-st.caption("Monthly client acquisition by source (campaign / IB), anchored on **portal - ftd_time**. Dates parsed as **DD/MM/YYYY**.")
+# Dashboard selector
+dashboard_type = st.radio(
+    "Select Dashboard",
+    ["FTD Dashboard", "KYC Dashboard"],
+    horizontal=True,
+    help="Switch between FTD (First Time Deposit) and KYC (Know Your Customer) dashboards"
+)
+
+# Dynamic title and caption based on selection
+if dashboard_type == "FTD Dashboard":
+    st.title("FTD Acquisition Dashboard")
+    st.caption("Monthly client acquisition by source (campaign / IB), anchored on **portal - ftd_time**. Dates parsed as **DD/MM/YYYY**.")
+    date_column = "portal - ftd_time"
+    metric_name = "FTD Clients"
+else:
+    st.title("KYC Clients Dashboard")
+    st.caption("Monthly KYC'd clients by source (campaign / IB), anchored on **DATE_CREATED**. Dates parsed as **DD/MM/YYYY** (time component ignored).")
+    date_column = "DATE_CREATED"
+    metric_name = "KYC'd Clients"
 
 # Initialize tour state
 if "tour_step" not in st.session_state:
@@ -113,22 +130,28 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
         st.markdown("""
         - **Purpose**: Date when client became FTD
         - **Format**: DD/MM/YYYY (e.g., "25/08/2024")
-        - **Notes**: Invalid dates will be dropped
+        - **Used for**: FTD Dashboard
         """)
         
-        st.markdown("#### 2️⃣ `portal - source_marketing_campaign` (Required)")
+        st.markdown("#### 2️⃣ `DATE_CREATED` (Required)")
+        st.markdown("""
+        - **Purpose**: Date when client completed KYC
+        - **Format**: DD/MM/YYYY HH:MM:SS
+        - **Example**: "25/08/2024 14:30:45"
+        - **Used for**: KYC Dashboard
+        - **Note**: Time component is ignored
+        """)
+        
+        st.markdown("#### 3️⃣ `portal - source_marketing_campaign` (Required)")
         st.markdown("""
         - **Purpose**: Source/campaign that brought the client
         - **Format**: Text string (can be empty for organic)
-        - **Examples**:
-          - "Campaign_Name_2024"
-          - "IB_Partner_Name" 
-          - "Google_Ads_Q1"
-          - Empty/null → "(Unknown)" Organic
+        - **Examples**: IB-18050031, MKT-Campaign, etc.
+        - **Empty/null**: Becomes "(Unknown)" Organic
         """)
     
     with col2:
-        st.markdown("#### 3️⃣ `Record ID` (Required)")
+        st.markdown("#### 4️⃣ `Record ID` (Required)")
         st.markdown("""
         - **Purpose**: Unique identifier for each client
         - **Format**: Any unique value (number/text)
@@ -141,6 +164,11 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
         - **🏦 IB Sources**: Contains "IB" in name
         - **🌱 Organic**: Unknown/empty sources
         - **📢 Marketing**: All other sources
+        """)
+        
+        st.warning("""
+        **⚠️ Important**: Both date columns (`portal - ftd_time` AND `DATE_CREATED`) 
+        MUST be present in your CSV file, even if you only use one dashboard.
         """)
     
     st.markdown("---")
@@ -207,30 +235,50 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
         """)
 
 # --- Load data ---
-uploaded = st.file_uploader("Upload CSV (must include 'portal - ftd_time' and 'portal - source_marketing_campaign')", type=["csv"])
+uploaded = st.file_uploader("Upload CSV (must include both date columns and source column)", type=["csv"])
 
 @st.cache_data(show_spinner=False)
 def load_df(file):
     df = pd.read_csv(file)
     original_count = len(df)
     
-    # Expected columns
-    date_col = "portal - ftd_time"
+    # Expected columns - BOTH date columns must be present
+    ftd_date_col = "portal - ftd_time"
+    kyc_date_col = "DATE_CREATED"
     source_col = "portal - source_marketing_campaign"
-    if date_col not in df.columns or source_col not in df.columns:
-        raise ValueError(f"CSV is missing required columns: '{date_col}' and '{source_col}'. Found: {list(df.columns)}")
     
-    # Count before date parsing
-    df[date_col] = pd.to_datetime(df[date_col], dayfirst=True, errors="coerce")
-    invalid_dates = df[date_col].isna().sum()
+    # Check all required columns exist
+    missing_cols = []
+    if ftd_date_col not in df.columns:
+        missing_cols.append(ftd_date_col)
+    if kyc_date_col not in df.columns:
+        missing_cols.append(kyc_date_col)
+    if source_col not in df.columns:
+        missing_cols.append(source_col)
     
+    if missing_cols:
+        raise ValueError(f"CSV is missing required columns: {missing_cols}. Found columns: {list(df.columns)}")
+    
+    # Parse FTD date column
+    df[ftd_date_col] = pd.to_datetime(df[ftd_date_col], dayfirst=True, errors="coerce")
+    invalid_ftd_dates = df[ftd_date_col].isna().sum()
+    
+    # Parse KYC date column (handles datetime with time component)
+    # First try to parse with time, then extract just the date
+    df[kyc_date_col] = pd.to_datetime(df[kyc_date_col], dayfirst=True, errors="coerce")
+    invalid_kyc_dates = df[kyc_date_col].isna().sum()
+    
+    # Fill missing sources
     df[source_col] = df[source_col].fillna("(Unknown)").astype(str).str.strip()
-    df = df.dropna(subset=[date_col]).copy()
-    df["ftd_month"] = df[date_col].dt.to_period("M").dt.to_timestamp()
+    
+    # Create month columns for both dashboards
+    df["ftd_month"] = df[ftd_date_col].dt.to_period("M").dt.to_timestamp()
+    df["kyc_month"] = df[kyc_date_col].dt.to_period("M").dt.to_timestamp()
     
     # Store diagnostic info
     df.attrs['original_count'] = original_count
-    df.attrs['invalid_dates'] = invalid_dates
+    df.attrs['invalid_ftd_dates'] = invalid_ftd_dates
+    df.attrs['invalid_kyc_dates'] = invalid_kyc_dates
     df.attrs['final_count'] = len(df)
     
     return df
@@ -253,66 +301,88 @@ else:
 
 # Data Quality Check
 with st.expander("📊 Data Quality Report", expanded=False):
-    date_col = "portal - ftd_time"
     source_col = "portal - source_marketing_campaign"
     
+    # Select the appropriate date column and month column based on dashboard
+    if dashboard_type == "FTD Dashboard":
+        active_date_col = "portal - ftd_time"
+        active_month_col = "ftd_month"
+        invalid_dates_key = 'invalid_ftd_dates'
+    else:
+        active_date_col = "DATE_CREATED"
+        active_month_col = "kyc_month"
+        invalid_dates_key = 'invalid_kyc_dates'
+    
     # Show loading diagnostics
-    st.markdown("#### Data Loading Summary")
+    st.markdown(f"#### Data Loading Summary ({dashboard_type})")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric("Records in CSV", f"{df.attrs.get('original_count', len(df)):,}")
     
     with col2:
-        dropped = df.attrs.get('invalid_dates', 0)
-        st.metric("Invalid Dates Dropped", f"{dropped:,}",
-                  f"-{dropped/df.attrs.get('original_count', 1)*100:.1f}%" if dropped > 0 else None,
+        dropped = df.attrs.get(invalid_dates_key, 0)
+        st.metric("Invalid Dates", f"{dropped:,}",
+                  f"{dropped/df.attrs.get('original_count', 1)*100:.1f}%" if dropped > 0 else None,
                   delta_color="inverse" if dropped > 0 else "off")
     
     with col3:
-        st.metric("Valid Records", f"{df.attrs.get('final_count', len(df)):,}")
+        # Count valid records for this dashboard (non-null dates)
+        valid_records = df[active_date_col].notna().sum()
+        st.metric("Valid Records", f"{valid_records:,}")
     
     with col4:
-        retention = (df.attrs.get('final_count', len(df)) / df.attrs.get('original_count', len(df)) * 100) if df.attrs.get('original_count', 1) > 0 else 100
+        retention = (valid_records / df.attrs.get('original_count', len(df)) * 100) if df.attrs.get('original_count', 1) > 0 else 100
         st.metric("Data Retention", f"{retention:.1f}%")
     
-    if df.attrs.get('invalid_dates', 0) > 0:
-        st.warning(f"⚠️ **{df.attrs.get('invalid_dates', 0)} records were dropped** due to invalid dates in 'portal - ftd_time' column. These dates could not be parsed as DD/MM/YYYY format.")
+    if df.attrs.get(invalid_dates_key, 0) > 0:
+        st.warning(f"⚠️ **{df.attrs.get(invalid_dates_key, 0)} records have invalid dates** in '{active_date_col}' column. These dates could not be parsed.")
     
     st.markdown("#### Data Quality Metrics")
     col1, col2, col3 = st.columns(3)
     
+    # Filter to only records with valid dates for the active dashboard
+    valid_df = df[df[active_date_col].notna()].copy()
+    
     with col1:
-        st.metric("Date Range", f"{df['ftd_month'].min():%b %Y} - {df['ftd_month'].max():%b %Y}")
-        # Show sample dates for verification
-        sample_dates = df[date_col].dropna().head(3)
-        if len(sample_dates) > 0:
-            st.caption("Sample parsed dates:")
-            for d in sample_dates:
-                st.caption(f"  • {d:%d/%m/%Y}")
+        if len(valid_df) > 0:
+            st.metric("Date Range", f"{valid_df[active_month_col].min():%b %Y} - {valid_df[active_month_col].max():%b %Y}")
+            # Show sample dates for verification
+            sample_dates = valid_df[active_date_col].dropna().head(3)
+            if len(sample_dates) > 0:
+                st.caption("Sample parsed dates:")
+                for d in sample_dates:
+                    if dashboard_type == "KYC Dashboard":
+                        st.caption(f"  • {d:%d/%m/%Y %H:%M:%S}")
+                    else:
+                        st.caption(f"  • {d:%d/%m/%Y}")
+        else:
+            st.metric("Date Range", "No valid dates")
     
     with col2:
-        unknown_sources = (df[source_col] == "(Unknown)").sum()
+        unknown_sources = (valid_df[source_col] == "(Unknown)").sum()
         st.metric("Unknown Sources", f"{unknown_sources:,}")
         if unknown_sources > 0:
             st.warning(f"⚠️ {unknown_sources} records with unknown source")
     
     with col3:
-        st.metric("Unique Sources", f"{df[source_col].nunique()}")
+        st.metric("Unique Sources", f"{valid_df[source_col].nunique()}")
         # Check for data gaps
-        expected_months = pd.period_range(df['ftd_month'].min(), df['ftd_month'].max(), freq='M')
-        actual_months = df['ftd_month'].dt.to_period('M').unique()
-        missing_months = len(expected_months) - len(actual_months)
-        if missing_months > 0:
-            st.warning(f"⚠️ {missing_months} months with no data")
+        if len(valid_df) > 0:
+            expected_months = pd.period_range(valid_df[active_month_col].min(), valid_df[active_month_col].max(), freq='M')
+            actual_months = valid_df[active_month_col].dt.to_period('M').unique()
+            missing_months = len(expected_months) - len(actual_months)
+            if missing_months > 0:
+                st.warning(f"⚠️ {missing_months} months with no data")
     
     # Show monthly breakdown for verification
-    st.markdown("#### Monthly Record Count (All Sources)")
-    monthly_counts = df.groupby(df['ftd_month'].dt.to_period('M'))['Record ID'].count().sort_index()
-    monthly_df = pd.DataFrame({
-        'Month': monthly_counts.index.strftime('%B %Y'),
-        'All Sources': monthly_counts.values
-    })
+    st.markdown(f"#### Monthly Record Count (All Sources - {dashboard_type})")
+    if len(valid_df) > 0:
+        monthly_counts = valid_df.groupby(valid_df[active_month_col].dt.to_period('M'))['Record ID'].count().sort_index()
+        monthly_df = pd.DataFrame({
+            'Month': monthly_counts.index.strftime('%B %Y'),
+            'All Sources': monthly_counts.values
+        })
     
     # Add a note about filtering
     st.info("💡 **Note:** This table shows ALL records in your data. The chart below only shows records from your SELECTED sources. If you've selected fewer sources, the chart numbers will be lower.")
@@ -463,9 +533,21 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("Date Range")
     
-    # Get all available months
-    min_m, max_m = df["ftd_month"].min(), df["ftd_month"].max()
-    all_months = pd.date_range(start=min_m, end=max_m, freq='MS').to_list()
+    # Get all available months based on dashboard type
+    # Use the same variables defined at the top
+    if dashboard_type == "FTD Dashboard":
+        month_col = "ftd_month"
+    else:
+        month_col = "kyc_month"
+    
+    # Filter to valid records for this dashboard
+    valid_df_sidebar = df[df[month_col].notna()].copy()
+    
+    if len(valid_df_sidebar) > 0:
+        min_m, max_m = valid_df_sidebar[month_col].min(), valid_df_sidebar[month_col].max()
+        all_months = pd.date_range(start=min_m, end=max_m, freq='MS').to_list()
+    else:
+        all_months = []
     
     # Initialize selected months in session state
     if "selected_months" not in st.session_state:
@@ -518,7 +600,7 @@ with st.sidebar:
                 month_label = month.strftime("%B")
                 
                 # Count of records in this month
-                month_count = len(df[df["ftd_month"] == month])
+                month_count = len(valid_df_sidebar[valid_df_sidebar[month_col] == month])
                 
                 new_state = st.checkbox(
                     f"{month_label} ({month_count:,} records)",
@@ -558,17 +640,28 @@ with st.sidebar:
         st.caption("• **Marketing**: All other sources")
 
 # Apply filters
+# Use the correct month column based on dashboard type
+if dashboard_type == "FTD Dashboard":
+    filter_month_col = "ftd_month"
+    filter_date_col = "portal - ftd_time"
+else:
+    filter_month_col = "kyc_month"
+    filter_date_col = "DATE_CREATED"
+
 # Filter by selected months (not just range)
 if selected_months:
-    mask_time = df["ftd_month"].isin(selected_months)
+    mask_time = df[filter_month_col].isin(selected_months)
 else:
     mask_time = pd.Series(False, index=df.index)  # No months selected = no data
 
+# Also filter out records with invalid dates for this dashboard
+mask_valid_dates = df[filter_date_col].notna()
+
 mask_source = df[source_col].isin(selected_sources) if selected_sources else pd.Series(True, index=df.index)
-dff = df.loc[mask_time & mask_source].copy()
+dff = df.loc[mask_time & mask_valid_dates & mask_source].copy()
 
 # Also get data for ALL sources in the selected months (for active sources calculation)
-dff_all_sources = df.loc[mask_time].copy()
+dff_all_sources = df.loc[mask_time & mask_valid_dates].copy()
 
 # Function to categorize sources
 def categorize_source(source_name):
@@ -588,9 +681,9 @@ if group_sources:
     
     # Group by category instead of individual source
     counts = (
-        dff.groupby(["ftd_month", "source_category"])["Record ID"].size().reset_index(name="clients")
+        dff.groupby([filter_month_col, "source_category"])["Record ID"].size().reset_index(name="clients")
     )
-    counts.rename(columns={"source_category": source_col}, inplace=True)
+    counts.rename(columns={"source_category": source_col, filter_month_col: "month"}, inplace=True)
     
     # Get unique categories from selected sources
     selected_categories = dff['source_category'].unique().tolist()
@@ -599,32 +692,39 @@ if group_sources:
     months = sorted(selected_months) if selected_months else []
     # Ensure all (month, category) combos exist
     full = (
-        pd.MultiIndex.from_product([months, selected_categories], names=["ftd_month", source_col])
+        pd.MultiIndex.from_product([months, selected_categories], names=["month", source_col])
         .to_frame(index=False)
     )
     counts = (
-        full.merge(counts, on=["ftd_month", source_col], how="left")
+        full.merge(counts, on=["month", source_col], how="left")
         .fillna({"clients": 0})
     )
+    # Rename back for consistency
+    counts.rename(columns={"month": "ftd_month"}, inplace=True)
     
     # Update selected_sources to be categories for display purposes
     display_sources = selected_categories
 else:
     # Original aggregation by individual source
     counts = (
-        dff.groupby(["ftd_month", source_col])["Record ID"].size().reset_index(name="clients")
+        dff.groupby([filter_month_col, source_col])["Record ID"].size().reset_index(name="clients")
     )
+    # Rename month column for consistency
+    counts.rename(columns={filter_month_col: "month"}, inplace=True)
+    
     # Use only selected months, not a continuous range
     months = sorted(selected_months) if selected_months else []
     # Ensure all (month, source) combos exist for proper stacking/lines
     full = (
-        pd.MultiIndex.from_product([months, selected_sources], names=["ftd_month", source_col])
+        pd.MultiIndex.from_product([months, selected_sources], names=["month", source_col])
         .to_frame(index=False)
     )
     counts = (
-        full.merge(counts, on=["ftd_month", source_col], how="left")
+        full.merge(counts, on=["month", source_col], how="left")
         .fillna({"clients": 0})
     )
+    # Rename back for consistency with rest of code
+    counts.rename(columns={"month": "ftd_month"}, inplace=True)
     display_sources = selected_sources
 
 # KPI row
@@ -642,8 +742,8 @@ active_percentage = (active_sources_in_period / total_sources_with_data * 100) i
 st.markdown("### Overview")
 k1, k2, k3, k4, k5 = st.columns(5)
 
-k1.metric("Total Clients", f"{total_clients:,}",
-          help="Total clients from SELECTED sources only")
+k1.metric(f"Total {metric_name}", f"{total_clients:,}",
+          help=f"Total {metric_name.lower()} from SELECTED sources only")
 k2.metric("Avg/Month", f"{avg_monthly:.0f}")
 k3.metric("Active Sources", f"{active_sources_in_period} / {total_sources_with_data}", 
           f"{active_percentage:.1f}% active",
