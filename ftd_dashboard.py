@@ -349,6 +349,20 @@ def load_df(file):
     kyc_date_col = actual_kyc_col
     source_col = actual_source_col
     
+    # Debug: Show actual raw date values
+    print("🔍 RAW DATE DEBUGGING:")
+    print(f"First 10 raw values from '{ftd_date_col}' column:")
+    for i in range(min(10, len(df))):
+        raw_value = df[ftd_date_col].iloc[i]
+        print(f"Row {i+1}: '{raw_value}' (type: {type(raw_value).__name__})")
+    
+    # Also check column names
+    print(f"\n📋 Column names: {list(df.columns)}")
+    print(f"📊 DataFrame shape: {df.shape}")
+    print(f"🎯 Actual FTD column name: '{ftd_date_col}'")
+    print(f"🎯 Actual KYC column name: '{kyc_date_col}'")
+    print(f"🎯 Actual source column name: '{source_col}'")
+    
     # Parse FTD date column using EXPLICIT DD/MM/YYYY parser
     sample_dates = df[ftd_date_col].head(20).tolist()
     print(f"DEBUG: Sample raw FTD dates: {sample_dates[:10]}")
