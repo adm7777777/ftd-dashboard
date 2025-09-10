@@ -95,12 +95,6 @@ st.markdown("""
 st.title("FTD Acquisition Dashboard")
 st.caption("Monthly client acquisition by source (campaign / IB), anchored on **portal - ftd_time**. Dates parsed as **DD/MM/YYYY**.")
 
-# Initialize tour state
-if "tour_completed" not in st.session_state:
-    st.session_state.tour_completed = False
-if "show_tour" not in st.session_state:
-    st.session_state.show_tour = False
-
 # --- CSV Format Guide ---
 with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
     st.markdown("### Required CSV Fields")
@@ -318,160 +312,12 @@ with st.expander("📊 Data Quality Report", expanded=False):
     
     st.dataframe(monthly_df, hide_index=True, width="stretch")
 
-# --- Tour Functionality ---
-if not st.session_state.tour_completed:
-    tour_container = st.container()
-    with tour_container:
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("🎯 Start Interactive Tour", type="primary", use_container_width=True):
-                st.session_state.show_tour = True
-        
-        if st.session_state.show_tour:
-            st.markdown("---")
-            st.markdown("## 🎯 Dashboard Tour")
-            
-            # Tour steps
-            tour_step = st.radio(
-                "Select a section to learn about:",
-                ["1. Data Quality Report", "2. Sidebar Filters", "3. Main Chart", "4. Performance Metrics", "5. Data Export"],
-                horizontal=False,
-                key="tour_step"
-            )
-            
-            if tour_step == "1. Data Quality Report":
-                st.info("""
-                **📊 Data Quality Report (Top of Page)**
-                
-                This expandable section shows:
-                - **Total Records**: How many rows were in your CSV
-                - **Invalid Dates**: Records that couldn't be parsed (DD/MM/YYYY format expected)
-                - **Date Range**: The time span of your data
-                - **Unknown Sources**: Records without a source specified
-                - **Monthly Breakdown**: Record count for each month
-                
-                💡 **Tip**: Always check this first to ensure your data loaded correctly!
-                """)
-                
-            elif tour_step == "2. Sidebar Filters":
-                st.info("""
-                **🎛️ Sidebar Filters (Left Panel)**
-                
-                **Source Selection:**
-                - **Search Box**: Type to filter sources by name
-                - **Quick Buttons**: Select All, Clear All, or Top N sources
-                - **Checkboxes**: Individual control for each source (shows client count)
-                - **Scrollable List**: 500px container fits many sources with small font
-                
-                **Date Range:**
-                - **Month Checkboxes**: Select specific months (non-consecutive allowed!)
-                - **Quick Select**: All, None, Last 6M, YTD buttons
-                - **Grouped by Year**: Recent months appear first
-                
-                **Display Options:**
-                - **Show Total**: Toggle the red total line on/off
-                - **Group Sources**: Combine into IB/Organic/Marketing categories
-                - **Chart Type**: Switch between Line and Stacked Bar views
-                
-                💡 **Tip**: Use Cmd/Ctrl+F to search for specific sources!
-                """)
-                
-            elif tour_step == "3. Main Chart":
-                st.info("""
-                **📈 Main Chart Area**
-                
-                **Interactive Features:**
-                - **Hover**: See exact values for any data point
-                - **Legend**: Click to highlight specific sources
-                - **Red Total Line**: Shows aggregate when enabled
-                - **Zoom**: Use mouse to select area (desktop only)
-                
-                **Chart Types:**
-                - **Line Chart**: Best for trends over time
-                - **Stacked Bars**: Shows composition and totals
-                
-                **Color Coding (when grouped):**
-                - 🟢 Green: IB Sources
-                - 🔵 Blue: Organic (Unknown)
-                - 🟠 Orange: Marketing
-                - 🔴 Red: Total Line
-                
-                💡 **Tip**: The chart only shows selected sources, not all data!
-                """)
-                
-            elif tour_step == "4. Performance Metrics":
-                st.info("""
-                **📊 Performance Sections**
-                
-                **Overview Metrics (Top):**
-                - Total Clients (selected sources)
-                - Average Monthly
-                - Active Sources
-                - Total Sources with Data
-                - Percentage Active
-                
-                **Performance Metrics:**
-                - **Latest Month**: Most recent month's performance
-                - **Best Month**: Highest client count
-                - **Worst Month**: Lowest client count
-                - **Avg Growth**: Month-over-month percentage
-                
-                **Source Rankings:**
-                - **Top Performers**: Best sources by total clients
-                - **Bottom Performers**: Lowest performing sources
-                - **Trend Indicators**: ↑ growing, ↓ declining, → stable
-                
-                💡 **Tip**: Rankings update based on your filters!
-                """)
-                
-            elif tour_step == "5. Data Export":
-                st.info("""
-                **💾 Data Export Options**
-                
-                **Pivot Table**: 
-                - Shows data in month × source format
-                - Includes totals row and column
-                - Updates with your filters
-                
-                **Export Formats:**
-                - **CSV**: Universal format for Excel/Google Sheets
-                - **Excel**: Direct .xlsx file with formatting
-                - **JSON**: For developers and APIs
-                
-                **Debug Mode:**
-                - Check "Show debug info" to see raw data
-                - Useful for troubleshooting
-                
-                💡 **Tip**: Export filtered data to focus on specific periods/sources!
-                """)
-            
-            st.markdown("---")
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("✅ End Tour", type="primary", use_container_width=True):
-                    st.session_state.tour_completed = True
-                    st.session_state.show_tour = False
-                    st.rerun()
-            with col2:
-                if st.button("Don't show tour again", use_container_width=True):
-                    st.session_state.tour_completed = True
-                    st.session_state.show_tour = False
-                    st.rerun()
-
 # --- Sidebar filters ---
 source_col = "portal - source_marketing_campaign"
 group_sources = False  # Initialize here so it's available outside sidebar
 
 with st.sidebar:
     st.header("Filters")
-    
-    # Add tour restart button at the top of sidebar
-    if st.session_state.tour_completed:
-        if st.button("🎯 Restart Tour", use_container_width=True):
-            st.session_state.tour_completed = False
-            st.session_state.show_tour = True
-            st.rerun()
-        st.markdown("---")
     # Source selection
     totals = df.groupby(source_col, dropna=False)["Record ID"].size().sort_values(ascending=False)
     all_sources = totals.index.tolist()
