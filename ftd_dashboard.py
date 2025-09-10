@@ -950,7 +950,7 @@ with col3:
     json_data = {
         "summary": {
             "total_clients": total_clients,
-            "period": f"{months.min():%Y-%m-%d} to {months.max():%Y-%m-%d}" if len(months) > 0 else "No data",
+            "period": f"{min(months):%Y-%m-%d} to {max(months):%Y-%m-%d}" if len(months) > 0 else "No data",
             "sources_count": len(display_sources)
         },
         "monthly_data": pivot.reset_index().to_dict(orient="records"),
