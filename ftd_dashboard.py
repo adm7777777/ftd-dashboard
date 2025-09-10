@@ -298,36 +298,53 @@ def load_df(file):
     # Print sample raw dates for debugging
     print(f"DEBUG: Sample raw FTD dates: {ftd_original.head(10).tolist()}")
     
-    # Try multiple date formats in order
-    formats_to_try = [
-        '%d/%m/%Y',           # 25/12/2024
-        '%d-%m-%Y',           # 25-12-2024
-        '%Y-%m-%d',           # 2024-12-25
-        '%m/%d/%Y',           # 12/25/2024 (US format)
-        '%d/%m/%Y %H:%M:%S',  # 25/12/2024 14:30:45
-        '%Y-%m-%d %H:%M:%S',  # 2024-12-25 14:30:45
-    ]
+    # FORCE DD/MM/YYYY parsing - NO American format allowed
+    # Use only European/International date formats
     
-    df[ftd_date_col] = pd.NaT  # Start with all null
+    # Try DD/MM/YYYY with 4-digit year first
+    df[ftd_date_col] = pd.to_datetime(ftd_original, format='%d/%m/%Y', errors='coerce')
+    parsed_count = df[ftd_date_col].notna().sum()
+    print(f"DEBUG: DD/MM/YYYY (4-digit year) parsed {parsed_count} dates")
     
-    for fmt in formats_to_try:
-        still_null = df[ftd_date_col].isna()
-        if still_null.sum() > 0:
-            try:
-                df.loc[still_null, ftd_date_col] = pd.to_datetime(
-                    ftd_original[still_null], format=fmt, errors='coerce'
-                )
-                parsed_this_round = df[ftd_date_col].notna().sum() - (len(df) - still_null.sum())
-                if parsed_this_round > 0:
-                    print(f"DEBUG: Format '{fmt}' parsed {parsed_this_round} additional dates")
-            except:
-                continue
-    
-    # Final fallback with dayfirst
+    # Try DD/MM/YY with 2-digit year (this might be the issue!)
     still_null = df[ftd_date_col].isna()
     if still_null.sum() > 0:
         df.loc[still_null, ftd_date_col] = pd.to_datetime(
-            ftd_original[still_null], dayfirst=True, errors='coerce'
+            ftd_original[still_null], format='%d/%m/%y', errors='coerce'
+        )
+        new_parsed = df[ftd_date_col].notna().sum() - parsed_count
+        if new_parsed > 0:
+            print(f"DEBUG: DD/MM/YY (2-digit year) parsed {new_parsed} additional dates")
+    
+    # Try DD-MM-YYYY
+    still_null = df[ftd_date_col].isna()
+    if still_null.sum() > 0:
+        df.loc[still_null, ftd_date_col] = pd.to_datetime(
+            ftd_original[still_null], format='%d-%m-%Y', errors='coerce'
+        )
+        new_parsed = df[ftd_date_col].notna().sum() - parsed_count
+        if new_parsed > 0:
+            print(f"DEBUG: DD-MM-YYYY format parsed {new_parsed} additional dates")
+    
+    # Try DD/MM/YYYY with time
+    still_null = df[ftd_date_col].isna()
+    if still_null.sum() > 0:
+        df.loc[still_null, ftd_date_col] = pd.to_datetime(
+            ftd_original[still_null], format='%d/%m/%Y %H:%M:%S', errors='coerce'
+        )
+        new_parsed = df[ftd_date_col].notna().sum() - parsed_count
+        if new_parsed > 0:
+            print(f"DEBUG: DD/MM/YYYY HH:MM:SS format parsed {new_parsed} additional dates")
+    
+    # FINAL fallback: Force dayfirst=True with explicit instruction
+    still_null = df[ftd_date_col].isna()
+    if still_null.sum() > 0:
+        # Use infer_datetime_format=False to prevent US format inference
+        df.loc[still_null, ftd_date_col] = pd.to_datetime(
+            ftd_original[still_null], 
+            dayfirst=True, 
+            errors='coerce',
+            infer_datetime_format=False
         )
     
     # Show final parsing success rate
@@ -346,30 +363,46 @@ def load_df(file):
     
     invalid_ftd_dates = df[ftd_date_col].isna().sum()
     
-    # Parse KYC date column - handle datetime with time
+    # Parse KYC date column - FORCE DD/MM/YYYY format (no American format)
     # Store original values first
     kyc_original = df[kyc_date_col].copy()
+    print(f"DEBUG: Sample raw KYC dates: {kyc_original.head(10).tolist()}")
     
-    # Try with time format first
+    # Try DD/MM/YYYY with time first
     df[kyc_date_col] = pd.to_datetime(kyc_original, format='%d/%m/%Y %H:%M:%S', errors='coerce')
+    parsed_count = df[kyc_date_col].notna().sum()
+    print(f"DEBUG: DD/MM/YYYY HH:MM:SS format parsed {parsed_count} dates")
     
-    # If that didn't work for all, try without time
+    # Try DD/MM/YYYY without time for remaining nulls
     mask_nat = df[kyc_date_col].isna()
     if mask_nat.sum() > 0:
         df.loc[mask_nat, kyc_date_col] = pd.to_datetime(
             kyc_original[mask_nat], format='%d/%m/%Y', errors='coerce'
         )
-        
-        # Try with dayfirst for remaining nulls
-        mask_nat = df[kyc_date_col].isna()
-        if mask_nat.sum() > 0:
-            df.loc[mask_nat, kyc_date_col] = pd.to_datetime(
-                kyc_original[mask_nat], dayfirst=True, errors='coerce'
-            )
+        new_parsed = df[kyc_date_col].notna().sum() - parsed_count
+        if new_parsed > 0:
+            print(f"DEBUG: DD/MM/YYYY format parsed {new_parsed} additional dates")
     
-    # Show parsing success rate
+    # Try DD-MM-YYYY for remaining nulls
+    mask_nat = df[kyc_date_col].isna()
+    if mask_nat.sum() > 0:
+        df.loc[mask_nat, kyc_date_col] = pd.to_datetime(
+            kyc_original[mask_nat], format='%d-%m-%Y', errors='coerce'
+        )
+        
+    # FINAL fallback: Force dayfirst=True
+    mask_nat = df[kyc_date_col].isna()
+    if mask_nat.sum() > 0:
+        df.loc[mask_nat, kyc_date_col] = pd.to_datetime(
+            kyc_original[mask_nat], 
+            dayfirst=True, 
+            errors='coerce',
+            infer_datetime_format=False
+        )
+    
+    # Show final parsing success rate
     kyc_parsed_count = df[kyc_date_col].notna().sum()
-    print(f"DEBUG: KYC date parsing - {kyc_parsed_count}/{len(df)} dates successfully parsed")
+    print(f"DEBUG: KYC date parsing FINAL - {kyc_parsed_count}/{len(df)} dates successfully parsed ({kyc_parsed_count/len(df)*100:.1f}%)")
     
     # Mark KYC dates before 2023 or too far in future as invalid too
     kyc_before_2023 = (df[kyc_date_col] < min_valid_date).sum()
