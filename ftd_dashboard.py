@@ -1087,6 +1087,8 @@ if len(counts) > 0:
 
     st.dataframe(pivot, width="stretch")
 else:
+    # Create empty pivot for export functionality
+    pivot = pd.DataFrame()
     st.info("No data available to display in the table. Please check your filters and data quality.")
 
 # Source Performance Ranking
@@ -1148,56 +1150,60 @@ if len(display_sources) > 0:
 
 # Download section with multiple formats
 st.markdown("### Export Data")
-col1, col2, col3 = st.columns(3)
 
-with col1:
-    # CSV download
-    csv_bytes = pivot.reset_index().to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "📄 Download CSV", 
-        data=csv_bytes, 
-        file_name=f"ftd_by_source_{pd.Timestamp.now():%Y%m%d}.csv", 
-        mime="text/csv",
-        use_container_width=True
-    )
+if not pivot.empty:
+    col1, col2, col3 = st.columns(3)
 
-with col2:
-    # Excel download
-    import io
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        pivot.reset_index().to_excel(writer, sheet_name='Monthly Data', index=False)
-        if len(display_sources) > 0:
-            source_df.to_excel(writer, sheet_name='Source Rankings', index=False)
-    excel_bytes = buffer.getvalue()
-    st.download_button(
-        "📊 Download Excel",
-        data=excel_bytes,
-        file_name=f"ftd_analysis_{pd.Timestamp.now():%Y%m%d}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-    )
+    with col1:
+        # CSV download
+        csv_bytes = pivot.reset_index().to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "📄 Download CSV", 
+            data=csv_bytes, 
+            file_name=f"ftd_by_source_{pd.Timestamp.now():%Y%m%d}.csv", 
+            mime="text/csv",
+            use_container_width=True
+        )
 
-with col3:
-    # JSON download
-    import json
-    json_data = {
-        "summary": {
-            "total_clients": total_clients,
-            "period": f"{min(months):%Y-%m-%d} to {max(months):%Y-%m-%d}" if len(months) > 0 else "No data",
-            "sources_count": len(display_sources)
-        },
-        "monthly_data": pivot.reset_index().to_dict(orient="records"),
-        "source_rankings": source_df.to_dict(orient="records") if len(display_sources) > 0 else []
-    }
-    json_str = json.dumps(json_data, indent=2, default=str)
-    st.download_button(
-        "🔧 Download JSON",
-        data=json_str,
-        file_name=f"ftd_data_{pd.Timestamp.now():%Y%m%d}.json",
-        mime="application/json",
-        use_container_width=True
-    )
+    with col2:
+        # Excel download
+        import io
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            pivot.reset_index().to_excel(writer, sheet_name='Monthly Data', index=False)
+            if len(display_sources) > 0:
+                source_df.to_excel(writer, sheet_name='Source Rankings', index=False)
+        excel_bytes = buffer.getvalue()
+        st.download_button(
+            "📊 Download Excel",
+            data=excel_bytes,
+            file_name=f"ftd_analysis_{pd.Timestamp.now():%Y%m%d}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
+    with col3:
+        # JSON download
+        import json
+        json_data = {
+            "summary": {
+                "total_clients": total_clients,
+                "period": f"{min(months):%Y-%m-%d} to {max(months):%Y-%m-%d}" if len(months) > 0 else "No data",
+                "sources_count": len(display_sources)
+            },
+            "monthly_data": pivot.reset_index().to_dict(orient="records"),
+            "source_rankings": source_df.to_dict(orient="records") if len(display_sources) > 0 else []
+        }
+        json_str = json.dumps(json_data, indent=2, default=str)
+        st.download_button(
+            "🔧 Download JSON",
+            data=json_str,
+            file_name=f"ftd_data_{pd.Timestamp.now():%Y%m%d}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+else:
+    st.info("📥 **No data to export.** Please check your filters and data quality.")
 
 # Footer with quick reference
 with st.expander("ℹ️ Quick Reference", expanded=False):
