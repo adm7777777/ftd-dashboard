@@ -251,14 +251,20 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
 # --- Load data ---
 uploaded = st.file_uploader("Upload CSV (must include both date columns and source column)", type=["csv"])
 
-def parse_dd_mm_yyyy_date(date_str):
+def parse_dd_mm_yyyy_date(date_str, debug=False):
     """Force DD/MM/YYYY parsing - NO AMERICAN FORMAT"""
     try:
         # Remove any extra whitespace
         date_str = str(date_str).strip()
         
         # Handle NaN/None/empty values
-        if date_str in ['nan', 'NaN', 'None', '']:
+        if date_str in ['nan', 'NaN', 'None', '', 'NaT']:
+            return pd.NaT
+            
+        # Handle 1/1/1970 placeholder dates
+        if '1970' in date_str or '1/1/1970' in date_str:
+            if debug:
+                print(f"  Skipping placeholder date: {date_str}")
             return pd.NaT
             
         # Remove time component if present
@@ -271,6 +277,8 @@ def parse_dd_mm_yyyy_date(date_str):
         elif '-' in date_str:
             parts = date_str.split('-')
         else:
+            if debug:
+                print(f"  No separator found in: {date_str}")
             return pd.NaT
             
         if len(parts) >= 3:
@@ -280,12 +288,24 @@ def parse_dd_mm_yyyy_date(date_str):
             
             # Handle 2-digit years
             if year < 100:
-                year = 2000 + year if year < 50 else 1900 + year
+                if year < 30:  # 00-29 -> 2000-2029
+                    year = 2000 + year
+                else:  # 30-99 -> 1930-1999 (but these will be filtered out)
+                    year = 1900 + year
             
             # Basic validation
-            if 1 <= day <= 31 and 1 <= month <= 12 and year >= 2020:
-                return pd.Timestamp(year, month, day)
-    except:
+            if 1 <= day <= 31 and 1 <= month <= 12:
+                # Don't filter by year here, let the main function handle it
+                result = pd.Timestamp(year, month, day)
+                if debug and year < 2020:
+                    print(f"  Parsed but will filter: {date_str} -> {result}")
+                return result
+            else:
+                if debug:
+                    print(f"  Invalid day/month: day={day}, month={month} from {date_str}")
+    except Exception as e:
+        if debug:
+            print(f"  Error parsing '{date_str}': {e}")
         pass
     return pd.NaT
 
@@ -330,7 +350,19 @@ def load_df(file):
     source_col = actual_source_col
     
     # Parse FTD date column using EXPLICIT DD/MM/YYYY parser
-    print(f"DEBUG: Sample raw FTD dates: {df[ftd_date_col].head(10).tolist()}")
+    sample_dates = df[ftd_date_col].head(20).tolist()
+    print(f"DEBUG: Sample raw FTD dates: {sample_dates[:10]}")
+    print(f"DEBUG: Data types: {df[ftd_date_col].dtype}")
+    
+    # Check for unique date formats in the data
+    unique_formats = df[ftd_date_col].astype(str).str.extract(r'(\d+)[/-](\d+)[/-](\d+)', expand=False).notna().all(axis=1).sum()
+    print(f"DEBUG: Dates matching DD/MM/YYYY or DD-MM-YYYY pattern: {unique_formats}")
+    
+    # Debug parse first few dates to see what's happening
+    print("DEBUG: Parsing first 5 dates with debug mode:")
+    for i, date_str in enumerate(sample_dates[:5]):
+        print(f"  Date {i+1}: '{date_str}' (type: {type(date_str).__name__}, repr: {repr(date_str)})")
+        parse_dd_mm_yyyy_date(date_str, debug=True)
     
     # Apply the explicit parser to all FTD dates
     df[ftd_date_col] = df[ftd_date_col].apply(parse_dd_mm_yyyy_date)
@@ -338,9 +370,9 @@ def load_df(file):
     # Ensure the column is datetime type
     df[ftd_date_col] = pd.to_datetime(df[ftd_date_col])
     
-    # Show parsing success rate
-    valid_dates = df[ftd_date_col].notna().sum()
-    print(f'✅ Successfully parsed {valid_dates} out of {len(df)} FTD dates ({valid_dates/len(df)*100:.1f}%)')
+    # Show parsing success rate BEFORE filtering
+    valid_dates_before_filter = df[ftd_date_col].notna().sum()
+    print(f'📊 Parsed {valid_dates_before_filter} out of {len(df)} FTD dates before date range filtering')
     
     # Mark dates before 2023 or after reasonable future as invalid
     min_valid_date = pd.Timestamp('2023-01-01')
@@ -353,6 +385,8 @@ def load_df(file):
     df.loc[df[ftd_date_col] > max_valid_date, ftd_date_col] = pd.NaT
     
     invalid_ftd_dates = df[ftd_date_col].isna().sum()
+    valid_dates_after_filter = df[ftd_date_col].notna().sum()
+    print(f'✅ Final: {valid_dates_after_filter} valid FTD dates after filtering ({ftd_before_2023} before 2023, {ftd_future} after 2026)')
     
     # Parse KYC date column using EXPLICIT DD/MM/YYYY parser
     print(f"DEBUG: Sample raw KYC dates: {df[kyc_date_col].head(10).tolist()}")
