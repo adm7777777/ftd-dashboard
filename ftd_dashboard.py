@@ -105,9 +105,9 @@ st.markdown("""
 # Dashboard selector
 dashboard_type = st.radio(
     "Select Dashboard",
-    ["FTD Dashboard", "KYC Dashboard"],
+    ["FTD Dashboard", "KYC Dashboard", "KYC & FTD Comparison"],
     horizontal=True,
-    help="Switch between FTD (First Time Deposit) and KYC (Know Your Customer) dashboards"
+    help="FTD: First Time Deposits | KYC: Know Your Customer | Comparison: Both metrics grouped by source type"
 )
 
 # Dynamic title and caption based on selection
@@ -116,11 +116,16 @@ if dashboard_type == "FTD Dashboard":
     st.caption("Monthly client acquisition by source (campaign / IB), anchored on **portal - ftd_time**. Dates parsed as **DD/MM/YYYY**.")
     date_column = "portal - ftd_time"
     metric_name = "FTD Clients"
-else:
+elif dashboard_type == "KYC Dashboard":
     st.title("KYC Clients Dashboard")
     st.caption("Monthly KYC'd clients by source (campaign / IB), anchored on **DATE_CREATED**. Dates parsed as **DD/MM/YYYY** (time component ignored).")
     date_column = "DATE_CREATED"
     metric_name = "KYC'd Clients"
+else:  # KYC & FTD Comparison
+    st.title("KYC & FTD Comparison Dashboard")
+    st.caption("Compare KYC and FTD conversions by source type (IB Sources, Organic, Marketing). Shows conversion rates and trends.")
+    date_column = None  # Will use both columns
+    metric_name = "Conversions"
 
 # Initialize tour state
 if "tour_step" not in st.session_state:
@@ -750,55 +755,62 @@ with st.sidebar:
     totals = df.groupby(source_col, dropna=False)["Record ID"].size().sort_values(ascending=False)
     all_sources = totals.index.tolist()
     
-    st.subheader("Source Selection")
-    
-    # Search box
-    search_term = st.text_input("🔍 Search sources", placeholder="Type to filter...")
-    
-    # Quick actions
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("Select All", use_container_width=True):
+    # Only show source selection for individual dashboards, not comparison
+    if dashboard_type != "KYC & FTD Comparison":
+        st.subheader("Source Selection")
+        
+        # Search box
+        search_term = st.text_input("🔍 Search sources", placeholder="Type to filter...")
+        
+        # Quick actions
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("Select All", use_container_width=True):
+                st.session_state.selected_sources = all_sources.copy()
+        with col2:
+            if st.button("Clear All", use_container_width=True):
+                st.session_state.selected_sources = []
+        with col3:
+            top_n = st.number_input("Top N", min_value=1, max_value=max(1, len(all_sources)), value=min(10, len(all_sources)), label_visibility="collapsed")
+            if st.button(f"Top {top_n}", use_container_width=True):
+                st.session_state.selected_sources = all_sources[:top_n]
+        
+        # Initialize session state if not exists - default to ALL sources selected
+        if "selected_sources" not in st.session_state:
+            st.session_state.selected_sources = all_sources.copy()  # Select all sources by default
+        
+        # Filter sources based on search
+        filtered_sources = [s for s in all_sources if search_term.lower() in s.lower()]
+        
+        # Display count
+        st.caption(f"Showing {len(filtered_sources)} of {len(all_sources)} sources | {len(st.session_state.selected_sources)} selected")
+        
+        # Scrollable container with checkboxes
+        st.markdown("---")
+        container = st.container(height=500)  # Fixed height for scrolling - increased further with smaller fonts
+        
+        with container:
+            for source in filtered_sources:
+                count = totals[source]
+                is_selected = source in st.session_state.selected_sources
+                
+                # Create checkbox with source name and count
+                new_state = st.checkbox(
+                    f"{source} ({count:,} clients)",
+                    value=is_selected,
+                    key=f"checkbox_{source}"
+                )
+                
+                # Update session state based on checkbox
+                if new_state and source not in st.session_state.selected_sources:
+                    st.session_state.selected_sources.append(source)
+                elif not new_state and source in st.session_state.selected_sources:
+                    st.session_state.selected_sources.remove(source)
+    else:
+        # For comparison dashboard, select all sources by default
+        if "selected_sources" not in st.session_state or dashboard_type == "KYC & FTD Comparison":
             st.session_state.selected_sources = all_sources.copy()
-    with col2:
-        if st.button("Clear All", use_container_width=True):
-            st.session_state.selected_sources = []
-    with col3:
-        top_n = st.number_input("Top N", min_value=1, max_value=max(1, len(all_sources)), value=min(10, len(all_sources)), label_visibility="collapsed")
-        if st.button(f"Top {top_n}", use_container_width=True):
-            st.session_state.selected_sources = all_sources[:top_n]
-    
-    # Initialize session state if not exists - default to ALL sources selected
-    if "selected_sources" not in st.session_state:
-        st.session_state.selected_sources = all_sources.copy()  # Select all sources by default
-    
-    # Filter sources based on search
-    filtered_sources = [s for s in all_sources if search_term.lower() in s.lower()]
-    
-    # Display count
-    st.caption(f"Showing {len(filtered_sources)} of {len(all_sources)} sources | {len(st.session_state.selected_sources)} selected")
-    
-    # Scrollable container with checkboxes
-    st.markdown("---")
-    container = st.container(height=500)  # Fixed height for scrolling - increased further with smaller fonts
-    
-    with container:
-        for source in filtered_sources:
-            count = totals[source]
-            is_selected = source in st.session_state.selected_sources
-            
-            # Create checkbox with source name and count
-            new_state = st.checkbox(
-                f"{source} ({count:,} clients)",
-                value=is_selected,
-                key=f"checkbox_{source}"
-            )
-            
-            # Update session state based on checkbox
-            if new_state and source not in st.session_state.selected_sources:
-                st.session_state.selected_sources.append(source)
-            elif not new_state and source in st.session_state.selected_sources:
-                st.session_state.selected_sources.remove(source)
+        st.info("📊 Source selection disabled - showing all sources grouped by type (IB, Organic, Marketing)")
     
     selected_sources = st.session_state.selected_sources
     
@@ -947,24 +959,51 @@ with st.sidebar:
 if dashboard_type == "FTD Dashboard":
     filter_month_col = "ftd_month"
     filter_date_col = df.attrs.get('ftd_date_col', 'portal - ftd_time')
-else:
+elif dashboard_type == "KYC Dashboard":
     filter_month_col = "kyc_month"
     filter_date_col = df.attrs.get('kyc_date_col', 'DATE_CREATED')
+else:  # KYC & FTD Comparison
+    # For comparison, we'll need both columns
+    filter_month_col = None  # Will handle differently
+    filter_date_col = None
 
 # Filter by selected months (not just range)
-if selected_months:
-    mask_time = df[filter_month_col].isin(selected_months)
+if dashboard_type == "KYC & FTD Comparison":
+    # For comparison, filter both date columns
+    ftd_col = df.attrs.get('ftd_date_col', 'portal - ftd_time')
+    kyc_col = df.attrs.get('kyc_date_col', 'DATE_CREATED')
+    
+    # Create masks for both metrics
+    mask_time_ftd = df["ftd_month"].isin(selected_months) if selected_months else pd.Series(False, index=df.index)
+    mask_time_kyc = df["kyc_month"].isin(selected_months) if selected_months else pd.Series(False, index=df.index)
+    mask_valid_ftd = df[ftd_col].notna()
+    mask_valid_kyc = df[kyc_col].notna()
+    
+    # We'll use all sources for comparison (already set above)
+    mask_source = pd.Series(True, index=df.index)
+    
+    # Create two filtered dataframes
+    dff_ftd = df.loc[mask_time_ftd & mask_valid_ftd].copy()
+    dff_kyc = df.loc[mask_time_kyc & mask_valid_kyc].copy()
+    dff = None  # Will handle differently
 else:
-    mask_time = pd.Series(False, index=df.index)  # No months selected = no data
+    # Regular dashboard filtering
+    if selected_months:
+        mask_time = df[filter_month_col].isin(selected_months)
+    else:
+        mask_time = pd.Series(False, index=df.index)  # No months selected = no data
 
-# Also filter out records with invalid dates for this dashboard
-mask_valid_dates = df[filter_date_col].notna()
+    # Also filter out records with invalid dates for this dashboard
+    mask_valid_dates = df[filter_date_col].notna()
 
-mask_source = df[source_col].isin(selected_sources) if selected_sources else pd.Series(True, index=df.index)
-dff = df.loc[mask_time & mask_valid_dates & mask_source].copy()
+    mask_source = df[source_col].isin(selected_sources) if selected_sources else pd.Series(True, index=df.index)
+    dff = df.loc[mask_time & mask_valid_dates & mask_source].copy()
 
 # Also get data for ALL sources in the selected months (for active sources calculation)
-dff_all_sources = df.loc[mask_time & mask_valid_dates].copy()
+if dashboard_type != "KYC & FTD Comparison":
+    dff_all_sources = df.loc[mask_time & mask_valid_dates].copy()
+else:
+    dff_all_sources = None  # Not needed for comparison
 
 # Function to categorize sources
 def categorize_source(source_name):
@@ -978,7 +1017,63 @@ def categorize_source(source_name):
         return '📢 Marketing'
 
 # Aggregate
-if len(dff) == 0:
+if dashboard_type == "KYC & FTD Comparison":
+    # Special aggregation for comparison dashboard
+    # Process FTD data
+    dff_ftd['source_category'] = dff_ftd[source_col].apply(categorize_source)
+    ftd_counts = (
+        dff_ftd.groupby(["ftd_month", "source_category"])["Record ID"].size().reset_index(name="ftd_clients")
+    )
+    ftd_counts.rename(columns={"ftd_month": "month"}, inplace=True)
+    
+    # Process KYC data
+    dff_kyc['source_category'] = dff_kyc[source_col].apply(categorize_source)
+    kyc_counts = (
+        dff_kyc.groupby(["kyc_month", "source_category"])["Record ID"].size().reset_index(name="kyc_clients")
+    )
+    kyc_counts.rename(columns={"kyc_month": "month"}, inplace=True)
+    
+    # Get all unique categories
+    all_categories = sorted(set(
+        list(ftd_counts['source_category'].unique()) + 
+        list(kyc_counts['source_category'].unique())
+    ))
+    
+    # Create full month-category combinations
+    months = sorted(selected_months) if selected_months else []
+    if len(months) > 0 and len(all_categories) > 0:
+        full = pd.MultiIndex.from_product([months, all_categories], names=["month", "source_category"]).to_frame(index=False)
+        
+        # Merge FTD and KYC data
+        comparison_data = full.merge(ftd_counts, on=["month", "source_category"], how="left")
+        comparison_data = comparison_data.merge(kyc_counts, on=["month", "source_category"], how="left")
+        comparison_data = comparison_data.fillna({"ftd_clients": 0, "kyc_clients": 0})
+        
+        # Calculate conversion rate
+        comparison_data['conversion_rate'] = (comparison_data['ftd_clients'] / comparison_data['kyc_clients'] * 100).where(
+            comparison_data['kyc_clients'] > 0, 0
+        )
+    else:
+        comparison_data = pd.DataFrame(columns=["month", "source_category", "ftd_clients", "kyc_clients", "conversion_rate"])
+    
+    # Prepare for charting - reshape to long format for multi-line chart
+    ftd_chart = comparison_data[['month', 'source_category', 'ftd_clients']].copy()
+    ftd_chart['metric'] = 'FTD'
+    ftd_chart.rename(columns={'ftd_clients': 'clients'}, inplace=True)
+    
+    kyc_chart = comparison_data[['month', 'source_category', 'kyc_clients']].copy()
+    kyc_chart['metric'] = 'KYC'
+    kyc_chart.rename(columns={'kyc_clients': 'clients'}, inplace=True)
+    
+    counts = pd.concat([ftd_chart, kyc_chart], ignore_index=True)
+    counts['source_metric'] = counts['source_category'] + ' - ' + counts['metric']
+    counts.rename(columns={'month': 'ftd_month', 'source_metric': source_col}, inplace=True)
+    
+    # Set display sources for the chart
+    display_sources = sorted(counts[source_col].unique())
+    group_sources = False  # Don't use regular grouping logic
+    
+elif len(dff) == 0:
     # No data after filtering - create empty dataframe with expected structure
     months = sorted(selected_months) if selected_months else []
     if group_sources:
@@ -1049,30 +1144,62 @@ else:
     display_sources = selected_sources
 
 # KPI row
-total_clients = safe_int_convert(counts["clients"].sum() if len(counts) > 0 else 0)
-span_months = len(months)
-avg_monthly = total_clients / span_months if span_months > 0 else 0
+if dashboard_type == "KYC & FTD Comparison":
+    # Special metrics for comparison dashboard
+    total_kyc = comparison_data['kyc_clients'].sum() if 'comparison_data' in locals() else 0
+    total_ftd = comparison_data['ftd_clients'].sum() if 'comparison_data' in locals() else 0
+    overall_conversion = (total_ftd / total_kyc * 100) if total_kyc > 0 else 0
+    span_months = len(months)
+    
+    st.markdown("### KYC & FTD Overview")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Total KYC", f"{safe_int_convert(total_kyc):,}")
+    c2.metric("Total FTD", f"{safe_int_convert(total_ftd):,}")
+    c3.metric("Conversion Rate", f"{overall_conversion:.1f}%",
+              help="Overall FTD/KYC conversion rate")
+    c4.metric("Period", f"{span_months} months")
+    c5.metric("Categories", "3", help="IB, Organic, Marketing")
+    
+    # Show conversion rates by category
+    if 'comparison_data' in locals() and len(comparison_data) > 0:
+        st.markdown("### Conversion Rates by Source Type")
+        category_totals = comparison_data.groupby('source_category')[['kyc_clients', 'ftd_clients']].sum()
+        category_totals['conversion_rate'] = (category_totals['ftd_clients'] / category_totals['kyc_clients'] * 100).fillna(0)
+        
+        cols = st.columns(3)
+        for idx, (category, row) in enumerate(category_totals.iterrows()):
+            with cols[idx % 3]:
+                st.metric(
+                    category,
+                    f"{row['conversion_rate']:.1f}%",
+                    f"KYC: {safe_int_convert(row['kyc_clients'])} | FTD: {safe_int_convert(row['ftd_clients'])}"
+                )
+else:
+    # Regular dashboard metrics
+    total_clients = safe_int_convert(counts["clients"].sum() if len(counts) > 0 else 0)
+    span_months = len(months)
+    avg_monthly = total_clients / span_months if span_months > 0 else 0
 
-# Calculate active sources (sources with at least 1 client in the timeframe)
-# Get unique sources that have data in the filtered timeframe (across ALL sources, not just selected)
-sources_with_clients_in_period = dff_all_sources.groupby(source_col)["Record ID"].size()
-active_sources_in_period = len(sources_with_clients_in_period[sources_with_clients_in_period > 0])
-total_sources_with_data = df[source_col].nunique()
-active_percentage = (active_sources_in_period / total_sources_with_data * 100) if total_sources_with_data > 0 else 0
+    # Calculate active sources (sources with at least 1 client in the timeframe)
+    # Get unique sources that have data in the filtered timeframe (across ALL sources, not just selected)
+    sources_with_clients_in_period = dff_all_sources.groupby(source_col)["Record ID"].size()
+    active_sources_in_period = len(sources_with_clients_in_period[sources_with_clients_in_period > 0])
+    total_sources_with_data = df[source_col].nunique()
+    active_percentage = (active_sources_in_period / total_sources_with_data * 100) if total_sources_with_data > 0 else 0
 
-st.markdown("### Overview")
-k1, k2, k3, k4, k5 = st.columns(5)
+    st.markdown("### Overview")
+    k1, k2, k3, k4, k5 = st.columns(5)
 
-k1.metric(f"Total {metric_name}", f"{total_clients:,}",
-          help=f"Total {metric_name.lower()} from SELECTED sources only")
-k2.metric("Avg/Month", f"{avg_monthly:.0f}")
-k3.metric("Active Sources", f"{active_sources_in_period} / {total_sources_with_data}", 
-          f"{active_percentage:.1f}% active",
-          help="Sources with ≥1 client in selected timeframe (across ALL sources)")
-k4.metric("Selected" if not group_sources else "Categories", 
-          f"{len(display_sources)} / {len(all_sources) if not group_sources else 3}",
-          help="Sources currently selected for display")
-k5.metric("Period", f"{span_months} months")
+    k1.metric(f"Total {metric_name}", f"{total_clients:,}",
+              help=f"Total {metric_name.lower()} from SELECTED sources only")
+    k2.metric("Avg/Month", f"{avg_monthly:.0f}")
+    k3.metric("Active Sources", f"{active_sources_in_period} / {total_sources_with_data}", 
+              f"{active_percentage:.1f}% active",
+              help="Sources with ≥1 client in selected timeframe (across ALL sources)")
+    k4.metric("Selected" if not group_sources else "Categories", 
+              f"{len(display_sources)} / {len(all_sources) if not group_sources else 3}",
+              help="Sources currently selected for display")
+    k5.metric("Period", f"{span_months} months")
 
 # Add info about what's being displayed
 if group_sources:
@@ -1146,8 +1273,21 @@ if st.checkbox("Show debug info", value=False, key="debug_info"):
         st.write("Chart data preview:")
         st.dataframe(chart_data.head())
 
-# Add total line if requested
-if show_total and (len(display_sources) > 1 or group_sources):
+# Add total line if requested (not for comparison dashboard)
+if dashboard_type == "KYC & FTD Comparison":
+    # Custom color scale for comparison dashboard
+    color_mapping = {
+        '🏦 IB Sources - KYC': '#4CAF50',      # Green for IB KYC
+        '🏦 IB Sources - FTD': '#2E7D32',      # Darker green for IB FTD
+        '🌱 Organic - KYC': '#2196F3',         # Blue for Organic KYC
+        '🌱 Organic - FTD': '#1565C0',         # Darker blue for Organic FTD
+        '📢 Marketing - KYC': '#FF9800',       # Orange for Marketing KYC
+        '📢 Marketing - FTD': '#E65100'        # Darker orange for Marketing FTD
+    }
+    domain = display_sources
+    range_colors = [color_mapping.get(s, '#808080') for s in domain]
+    color_scale = alt.Scale(domain=domain, range=range_colors)
+elif show_total and (len(display_sources) > 1 or group_sources):
     # Calculate monthly totals
     monthly_totals = counts.groupby("ftd_month")["clients"].sum().reset_index()
     monthly_totals[source_col] = "📊 TOTAL"
@@ -1265,37 +1405,41 @@ else:
         opacity=alt.condition(hover, alt.value(1), alt.value(0.7))
     )
 
-st.markdown("### Monthly acquisition by source")
+if dashboard_type == "KYC & FTD Comparison":
+    st.markdown("### KYC vs FTD Comparison by Source Type")
+else:
+    st.markdown("### Monthly acquisition by source")
 if not chart_data.empty:
     st.altair_chart(chart.properties(height=380).interactive(), use_container_width=True)
 else:
     st.info("No data to display. Please select at least one source from the sidebar.")
 
-# Pivot table
-st.markdown("### Table: counts by month")
-if group_sources:
-    st.caption("📊 Data grouped by category (IB / Organic / Marketing)")
+# Pivot table (not for comparison dashboard)
+if dashboard_type != "KYC & FTD Comparison":
+    st.markdown("### Table: counts by month")
+    if group_sources:
+        st.caption("📊 Data grouped by category (IB / Organic / Marketing)")
 
-if len(counts) > 0:
-    pivot = counts.pivot_table(index="ftd_month", columns=source_col, values="clients", fill_value=0).sort_index()
+    if len(counts) > 0:
+        pivot = counts.pivot_table(index="ftd_month", columns=source_col, values="clients", fill_value=0).sort_index()
 
-    # Add total column if more than one source/category
-    if len(display_sources) > 1:
-        pivot["📊 TOTAL"] = pivot.sum(axis=1)
-    
-    # Format the index to show month names (only if index is datetime)
-    if len(pivot) > 0 and hasattr(pivot.index, 'strftime'):
-        pivot.index = pivot.index.strftime("%b %Y")
+        # Add total column if more than one source/category
+        if len(display_sources) > 1:
+            pivot["📊 TOTAL"] = pivot.sum(axis=1)
+        
+        # Format the index to show month names (only if index is datetime)
+        if len(pivot) > 0 and hasattr(pivot.index, 'strftime'):
+            pivot.index = pivot.index.strftime("%b %Y")
 
-    st.dataframe(pivot, width="stretch")
-else:
-    # Create empty pivot for export functionality
-    pivot = pd.DataFrame()
-    st.info("No data available to display in the table. Please check your filters and data quality.")
+        st.dataframe(pivot, width="stretch")
+    else:
+        # Create empty pivot for export functionality
+        pivot = pd.DataFrame()
+        st.info("No data available to display in the table. Please check your filters and data quality.")
 
-# Source Performance Ranking
-if len(display_sources) > 0:
-    st.markdown("### Source Performance Ranking")
+    # Source Performance Ranking
+    if len(display_sources) > 0:
+        st.markdown("### Source Performance Ranking")
     
     if group_sources:
         st.info("📊 Showing performance for grouped categories")
