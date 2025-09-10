@@ -836,12 +836,17 @@ with st.sidebar:
     
     # Initialize selected months in session state
     if "selected_months" not in st.session_state:
-        # Default to all months selected
-        st.session_state.selected_months = all_months
+        # Default to all 2025 months
+        months_2025 = [m for m in all_months if m.year == 2025]
+        if months_2025:
+            st.session_state.selected_months = months_2025
+        else:
+            # Fallback to all months if no 2025 data
+            st.session_state.selected_months = all_months
     
     # Quick select buttons
     st.caption("Quick select:")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         if st.button("All", use_container_width=True):
@@ -852,12 +857,17 @@ with st.sidebar:
             st.session_state.selected_months = []
             st.rerun()
     with col3:
+        if st.button("2025", use_container_width=True):
+            months_2025 = [m for m in all_months if m.year == 2025]
+            st.session_state.selected_months = months_2025
+            st.rerun()
+    with col4:
         if st.button("Last 6M", use_container_width=True):
             st.session_state.selected_months = all_months[-6:] if len(all_months) >= 6 else all_months
             st.rerun()
-    with col4:
+    with col5:
         if st.button("YTD", use_container_width=True):
-            current_year = max_m.year
+            current_year = max_m.year if 'max_m' in locals() else 2025
             st.session_state.selected_months = [m for m in all_months if m.year == current_year]
             st.rerun()
     
