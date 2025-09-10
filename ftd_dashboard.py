@@ -291,12 +291,32 @@ def load_df(file):
     kyc_date_col = actual_kyc_col
     source_col = actual_source_col
     
-    # Parse FTD date column - try explicit DD/MM/YYYY format first
-    try:
-        df[ftd_date_col] = pd.to_datetime(df[ftd_date_col], format='%d/%m/%Y', errors='coerce')
-    except:
-        # Fallback to dayfirst if explicit format fails
-        df[ftd_date_col] = pd.to_datetime(df[ftd_date_col], dayfirst=True, errors="coerce")
+    # Parse FTD date column - try multiple formats
+    # Store original values for debugging
+    ftd_original = df[ftd_date_col].copy()
+    
+    # Try different date formats in order
+    df[ftd_date_col] = pd.to_datetime(df[ftd_date_col], format='%d/%m/%Y', errors='coerce')
+    
+    # If that didn't work for many values, try other common formats
+    still_null = df[ftd_date_col].isna()
+    if still_null.sum() > 0:
+        # Try with dayfirst=True for remaining nulls
+        df.loc[still_null, ftd_date_col] = pd.to_datetime(
+            ftd_original[still_null], dayfirst=True, errors='coerce'
+        )
+        
+        # Try other common formats
+        still_null = df[ftd_date_col].isna()
+        if still_null.sum() > 0:
+            # Try DD-MM-YYYY
+            df.loc[still_null, ftd_date_col] = pd.to_datetime(
+                ftd_original[still_null], format='%d-%m-%Y', errors='coerce'
+            )
+    
+    # Show parsing success rate
+    parsed_count = df[ftd_date_col].notna().sum()
+    print(f"DEBUG: FTD date parsing - {parsed_count}/{len(df)} dates successfully parsed")
     
     # Mark dates before 2023 or after current year + 1 as invalid
     min_valid_date = pd.Timestamp('2023-01-01')
@@ -313,18 +333,27 @@ def load_df(file):
     # Parse KYC date column - handle datetime with time
     # Store original values first
     kyc_original = df[kyc_date_col].copy()
-    try:
-        # Try with time format first
-        df[kyc_date_col] = pd.to_datetime(kyc_original, format='%d/%m/%Y %H:%M:%S', errors='coerce')
-        # If that doesn't work for all, try without time
+    
+    # Try with time format first
+    df[kyc_date_col] = pd.to_datetime(kyc_original, format='%d/%m/%Y %H:%M:%S', errors='coerce')
+    
+    # If that didn't work for all, try without time
+    mask_nat = df[kyc_date_col].isna()
+    if mask_nat.sum() > 0:
+        df.loc[mask_nat, kyc_date_col] = pd.to_datetime(
+            kyc_original[mask_nat], format='%d/%m/%Y', errors='coerce'
+        )
+        
+        # Try with dayfirst for remaining nulls
         mask_nat = df[kyc_date_col].isna()
-        if mask_nat.any():
+        if mask_nat.sum() > 0:
             df.loc[mask_nat, kyc_date_col] = pd.to_datetime(
-                kyc_original[mask_nat], format='%d/%m/%Y', errors='coerce'
+                kyc_original[mask_nat], dayfirst=True, errors='coerce'
             )
-    except:
-        # Fallback to dayfirst
-        df[kyc_date_col] = pd.to_datetime(df[kyc_date_col], dayfirst=True, errors="coerce")
+    
+    # Show parsing success rate
+    kyc_parsed_count = df[kyc_date_col].notna().sum()
+    print(f"DEBUG: KYC date parsing - {kyc_parsed_count}/{len(df)} dates successfully parsed")
     
     # Mark KYC dates before 2023 or too far in future as invalid too
     kyc_before_2023 = (df[kyc_date_col] < min_valid_date).sum()
@@ -449,8 +478,20 @@ with st.expander("📊 Data Quality Report", expanded=False):
                         st.caption(f"  • {d:%d/%m/%Y %H:%M:%S}")
                     else:
                         st.caption(f"  • {d:%d/%m/%Y}")
+            else:
+                st.caption("No valid dates found")
+                # Show some raw date samples for debugging
+                raw_samples = df[active_date_col].head(5)
+                st.caption("Raw date samples from CSV:")
+                for i, raw_date in enumerate(raw_samples):
+                    st.caption(f"  • Row {i+1}: '{raw_date}'")
         else:
             st.metric("Date Range", "No valid dates")
+            # Show raw date samples for debugging
+            raw_samples = df[active_date_col].head(5)
+            st.caption("Raw date samples from CSV:")
+            for i, raw_date in enumerate(raw_samples):
+                st.caption(f"  • Row {i+1}: '{raw_date}'")
     
     with col2:
         unknown_sources = (valid_df[source_col] == "(Unknown)").sum()
