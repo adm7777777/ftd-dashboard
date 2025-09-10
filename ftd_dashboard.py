@@ -467,11 +467,13 @@ with st.expander("📊 Data Quality Report", expanded=False):
             'Month': monthly_counts.index.strftime('%B %Y'),
             'All Sources': monthly_counts.values
         })
-    
-    # Add a note about filtering
-    st.info("💡 **Note:** This table shows ALL records in your data. The chart below only shows records from your SELECTED sources. If you've selected fewer sources, the chart numbers will be lower.")
-    
-    st.dataframe(monthly_df, hide_index=True, width="stretch")
+        
+        # Add a note about filtering
+        st.info("💡 **Note:** This table shows ALL records in your data. The chart below only shows records from your SELECTED sources. If you've selected fewer sources, the chart numbers will be lower.")
+        
+        st.dataframe(monthly_df, hide_index=True, width="stretch")
+    else:
+        st.warning("No valid data available for the selected dashboard. Please check the data quality metrics above.")
 
 # --- Simple Tour Implementation ---
 # Using Streamlit's native info boxes for reliability
