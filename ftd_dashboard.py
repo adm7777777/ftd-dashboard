@@ -340,9 +340,9 @@ with st.sidebar:
         if st.button(f"Top {top_n}", use_container_width=True):
             st.session_state.selected_sources = all_sources[:top_n]
     
-    # Initialize session state if not exists
+    # Initialize session state if not exists - default to ALL sources selected
     if "selected_sources" not in st.session_state:
-        st.session_state.selected_sources = all_sources[:min(5, len(all_sources))]
+        st.session_state.selected_sources = all_sources.copy()  # Select all sources by default
     
     # Filter sources based on search
     filtered_sources = [s for s in all_sources if search_term.lower() in s.lower()]
