@@ -5,6 +5,48 @@ import numpy as np
 
 st.set_page_config(page_title="FTD Acquisition Dashboard", layout="wide")
 
+# Custom CSS to reduce font size in sidebar
+st.markdown("""
+<style>
+    /* Reduce font size for sidebar checkboxes */
+    .st-emotion-cache-1vt4y43 label {
+        font-size: 0.85rem !important;
+    }
+    
+    /* Reduce font size for all sidebar text */
+    section[data-testid="stSidebar"] .stCheckbox label {
+        font-size: 0.85rem !important;
+        line-height: 1.3 !important;
+    }
+    
+    /* Reduce padding between checkboxes */
+    section[data-testid="stSidebar"] .stCheckbox {
+        margin-bottom: -0.5rem !important;
+    }
+    
+    /* Reduce font size for sidebar headers */
+    section[data-testid="stSidebar"] h3 {
+        font-size: 1.1rem !important;
+    }
+    
+    /* Reduce font size for sidebar subheaders */
+    section[data-testid="stSidebar"] h2 {
+        font-size: 1.2rem !important;
+    }
+    
+    /* Reduce font size for buttons in sidebar */
+    section[data-testid="stSidebar"] button {
+        font-size: 0.85rem !important;
+        padding: 0.25rem 0.5rem !important;
+    }
+    
+    /* Reduce font size for search box */
+    section[data-testid="stSidebar"] input {
+        font-size: 0.85rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("FTD Acquisition Dashboard")
 st.caption("Monthly client acquisition by source (campaign / IB), anchored on **portal - ftd_time**. Dates parsed as **DD/MM/YYYY**.")
 
@@ -265,7 +307,7 @@ with st.sidebar:
     
     # Scrollable container with checkboxes
     st.markdown("---")
-    container = st.container(height=300)  # Fixed height for scrolling
+    container = st.container(height=400)  # Fixed height for scrolling - increased to show more items
     
     with container:
         for source in filtered_sources:
