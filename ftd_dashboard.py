@@ -511,12 +511,21 @@ if uploaded is not None:
     try:
         df = load_df(uploaded)
         
-        # Show debug info in an expander RIGHT AFTER LOADING
-        with st.expander("🔍 RAW CSV DEBUG INFO - CLICK HERE TO SEE YOUR DATA", expanded=True):
-            if hasattr(df, 'attrs') and 'debug_info' in df.attrs:
-                st.code(df.attrs['debug_info'], language='text')
-            else:
-                st.error("Debug info not available")
+        # Only show debug info if there are issues or debug mode is enabled
+        show_debug = False
+        if hasattr(df, 'attrs'):
+            placeholder_count = df.attrs.get('placeholder_count', 0)
+            invalid_ftd = df.attrs.get('invalid_ftd_dates', 0)
+            # Show debug if most records are placeholders or invalid
+            if placeholder_count > len(df) * 0.8 or invalid_ftd > len(df) * 0.5:
+                show_debug = True
+        
+        if show_debug or st.session_state.get('debug_mode', False):
+            with st.expander("🔍 RAW CSV DEBUG INFO", expanded=False):
+                if hasattr(df, 'attrs') and 'debug_info' in df.attrs:
+                    st.code(df.attrs['debug_info'], language='text')
+                else:
+                    st.error("Debug info not available")
                 
     except Exception as e:
         st.error(str(e))
@@ -921,6 +930,12 @@ with st.sidebar:
         st.caption("• **IB**: Sources containing 'IB' in the name")
         st.caption("• **Organic**: Unknown sources")
         st.caption("• **Marketing**: All other sources")
+    
+    # Debug mode toggle at the bottom
+    st.markdown("---")
+    st.session_state.debug_mode = st.checkbox("🔧 Debug Mode", 
+                                              value=st.session_state.get('debug_mode', False),
+                                              help="Show raw CSV data and detailed parsing information")
 
 # Apply filters
 # Use the correct month column based on dashboard type
