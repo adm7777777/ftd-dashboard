@@ -257,8 +257,10 @@ def parse_dd_mm_yyyy_date(date_str, debug=False):
         # Remove any extra whitespace
         date_str = str(date_str).strip()
         
-        # Handle NaN/None/empty values
-        if date_str in ['nan', 'NaN', 'None', '', 'NaT']:
+        # Handle NaN/None/empty values AND the string 'NaT'
+        if date_str in ['nan', 'NaN', 'None', '', 'NaT', 'nat', 'NAT', '<NA>', 'null', 'NULL']:
+            if debug:
+                print(f"  Null/NaT value detected: '{date_str}'")
             return pd.NaT
             
         # Handle 1/1/1970 placeholder dates
@@ -353,17 +355,27 @@ def load_df(file):
     # Debug: Show actual raw date values
     print("🔍 RAW DATE DEBUGGING:")
     print("📌 NOTE: Reading all CSV columns as strings to prevent pandas auto-parsing")
-    print(f"First 10 raw values from '{ftd_date_col}' column:")
-    for i in range(min(10, len(df))):
-        raw_value = df[ftd_date_col].iloc[i]
-        print(f"Row {i+1}: '{raw_value}' (type: {type(raw_value).__name__})")
     
-    # Also check column names
-    print(f"\n📋 Column names: {list(df.columns)}")
+    # EMERGENCY: Show ALL columns and sample values
+    print("\n🚨 EMERGENCY DEBUG - ALL COLUMNS AND SAMPLE VALUES:")
+    for col in df.columns[:20]:  # Show first 20 columns
+        sample_vals = df[col].head(3).tolist()
+        print(f"  Column '{col}': {sample_vals}")
+    
+    print(f"\n🎯 Looking for FTD column: '{ftd_date_col}'")
+    print(f"🎯 Column exists in df: {ftd_date_col in df.columns}")
+    
+    if ftd_date_col in df.columns:
+        print(f"\nFirst 10 raw values from '{ftd_date_col}' column:")
+        for i in range(min(10, len(df))):
+            raw_value = df[ftd_date_col].iloc[i]
+            print(f"Row {i+1}: '{raw_value}' (type: {type(raw_value).__name__})")
+    else:
+        print(f"❌ ERROR: Column '{ftd_date_col}' NOT FOUND in DataFrame!")
+        print(f"Available columns: {list(df.columns)}")
+    
+    print(f"\n📋 Total columns: {len(df.columns)}")
     print(f"📊 DataFrame shape: {df.shape}")
-    print(f"🎯 Actual FTD column name: '{ftd_date_col}'")
-    print(f"🎯 Actual KYC column name: '{kyc_date_col}'")
-    print(f"🎯 Actual source column name: '{source_col}'")
     
     # Parse FTD date column using EXPLICIT DD/MM/YYYY parser
     sample_dates = df[ftd_date_col].head(20).tolist()
