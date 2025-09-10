@@ -5,44 +5,89 @@ import numpy as np
 
 st.set_page_config(page_title="FTD Acquisition Dashboard", layout="wide")
 
-# Custom CSS to reduce font size in sidebar
+# Custom CSS to reduce font size in sidebar by 35%
 st.markdown("""
 <style>
-    /* Reduce font size for sidebar checkboxes */
-    .st-emotion-cache-1vt4y43 label {
-        font-size: 0.85rem !important;
+    /* Global sidebar font size reduction - 35% smaller (65% of original) */
+    section[data-testid="stSidebar"] * {
+        font-size: 0.65rem !important;
     }
     
-    /* Reduce font size for all sidebar text */
-    section[data-testid="stSidebar"] .stCheckbox label {
-        font-size: 0.85rem !important;
-        line-height: 1.3 !important;
-    }
-    
-    /* Reduce padding between checkboxes */
-    section[data-testid="stSidebar"] .stCheckbox {
-        margin-bottom: -0.5rem !important;
-    }
-    
-    /* Reduce font size for sidebar headers */
-    section[data-testid="stSidebar"] h3 {
+    /* Main sidebar title */
+    section[data-testid="stSidebar"] h1 {
         font-size: 1.1rem !important;
+        margin-bottom: 0.5rem !important;
     }
     
-    /* Reduce font size for sidebar subheaders */
+    /* Sidebar subheaders */
     section[data-testid="stSidebar"] h2 {
-        font-size: 1.2rem !important;
+        font-size: 0.9rem !important;
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.3rem !important;
     }
     
-    /* Reduce font size for buttons in sidebar */
+    /* Sidebar h3 headers */
+    section[data-testid="stSidebar"] h3 {
+        font-size: 0.8rem !important;
+        margin-top: 0.3rem !important;
+        margin-bottom: 0.2rem !important;
+    }
+    
+    /* Checkbox labels specifically */
+    section[data-testid="stSidebar"] .stCheckbox label span {
+        font-size: 0.65rem !important;
+        line-height: 1.2 !important;
+    }
+    
+    /* Reduce checkbox spacing even more */
+    section[data-testid="stSidebar"] .stCheckbox {
+        margin-bottom: -0.8rem !important;
+    }
+    
+    /* Buttons in sidebar */
     section[data-testid="stSidebar"] button {
-        font-size: 0.85rem !important;
-        padding: 0.25rem 0.5rem !important;
+        font-size: 0.65rem !important;
+        padding: 0.2rem 0.4rem !important;
+        height: auto !important;
+        min-height: 1.5rem !important;
     }
     
-    /* Reduce font size for search box */
+    /* Search box and other inputs */
     section[data-testid="stSidebar"] input {
-        font-size: 0.85rem !important;
+        font-size: 0.65rem !important;
+        padding: 0.3rem !important;
+        height: 2rem !important;
+    }
+    
+    /* Caption text */
+    section[data-testid="stSidebar"] .caption, 
+    section[data-testid="stSidebar"] small {
+        font-size: 0.6rem !important;
+    }
+    
+    /* Number inputs */
+    section[data-testid="stSidebar"] .stNumberInput label {
+        font-size: 0.65rem !important;
+    }
+    
+    /* Slider labels */
+    section[data-testid="stSidebar"] .stSlider label {
+        font-size: 0.65rem !important;
+    }
+    
+    /* Date inputs */
+    section[data-testid="stSidebar"] .stDateInput label {
+        font-size: 0.65rem !important;
+    }
+    
+    /* Reduce overall padding in sidebar */
+    section[data-testid="stSidebar"] > div {
+        padding-top: 1rem !important;
+    }
+    
+    /* Reduce spacing between sections */
+    section[data-testid="stSidebar"] hr {
+        margin: 0.5rem 0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -307,7 +352,7 @@ with st.sidebar:
     
     # Scrollable container with checkboxes
     st.markdown("---")
-    container = st.container(height=400)  # Fixed height for scrolling - increased to show more items
+    container = st.container(height=500)  # Fixed height for scrolling - increased further with smaller fonts
     
     with container:
         for source in filtered_sources:
