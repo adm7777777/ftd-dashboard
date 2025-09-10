@@ -259,7 +259,7 @@ def parse_dd_mm_yyyy_date(date_str):
         
         # Handle NaN/None/empty values
         if date_str in ['nan', 'NaN', 'None', '']:
-            return None
+            return pd.NaT
             
         # Remove time component if present
         if ' ' in date_str:
@@ -271,7 +271,7 @@ def parse_dd_mm_yyyy_date(date_str):
         elif '-' in date_str:
             parts = date_str.split('-')
         else:
-            return None
+            return pd.NaT
             
         if len(parts) >= 3:
             day = int(parts[0])    # FIRST part is DAY
@@ -287,7 +287,7 @@ def parse_dd_mm_yyyy_date(date_str):
                 return pd.Timestamp(year, month, day)
     except:
         pass
-    return None
+    return pd.NaT
 
 @st.cache_data(show_spinner=False)
 def load_df(file):
@@ -335,6 +335,9 @@ def load_df(file):
     # Apply the explicit parser to all FTD dates
     df[ftd_date_col] = df[ftd_date_col].apply(parse_dd_mm_yyyy_date)
     
+    # Ensure the column is datetime type
+    df[ftd_date_col] = pd.to_datetime(df[ftd_date_col])
+    
     # Show parsing success rate
     valid_dates = df[ftd_date_col].notna().sum()
     print(f'✅ Successfully parsed {valid_dates} out of {len(df)} FTD dates ({valid_dates/len(df)*100:.1f}%)')
@@ -356,6 +359,9 @@ def load_df(file):
     
     # Apply the explicit parser to all KYC dates
     df[kyc_date_col] = df[kyc_date_col].apply(parse_dd_mm_yyyy_date)
+    
+    # Ensure the column is datetime type
+    df[kyc_date_col] = pd.to_datetime(df[kyc_date_col])
     
     # Show parsing success rate
     valid_kyc_dates = df[kyc_date_col].notna().sum()
