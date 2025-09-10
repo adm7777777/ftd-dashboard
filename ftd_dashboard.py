@@ -377,39 +377,83 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("Date Range")
     
-    # Month range
+    # Get all available months
     min_m, max_m = df["ftd_month"].min(), df["ftd_month"].max()
+    all_months = pd.date_range(start=min_m, end=max_m, freq='MS').to_list()
     
-    # Quick date range buttons
+    # Initialize selected months in session state
+    if "selected_months" not in st.session_state:
+        # Default to all months selected
+        st.session_state.selected_months = all_months
+    
+    # Quick select buttons
     st.caption("Quick select:")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        if st.button("Last 3M", use_container_width=True):
-            st.session_state.date_range = (max_m - pd.DateOffset(months=2), max_m)
+        if st.button("All", use_container_width=True):
+            st.session_state.selected_months = all_months
+            st.rerun()
     with col2:
-        if st.button("Last 6M", use_container_width=True):
-            st.session_state.date_range = (max_m - pd.DateOffset(months=5), max_m)
+        if st.button("None", use_container_width=True):
+            st.session_state.selected_months = []
+            st.rerun()
     with col3:
-        if st.button("Last 12M", use_container_width=True):
-            st.session_state.date_range = (max_m - pd.DateOffset(months=11), max_m)
+        if st.button("Last 6M", use_container_width=True):
+            st.session_state.selected_months = all_months[-6:] if len(all_months) >= 6 else all_months
+            st.rerun()
     with col4:
         if st.button("YTD", use_container_width=True):
-            ytd_start = pd.Timestamp(max_m.year, 1, 1)
-            st.session_state.date_range = (ytd_start, max_m)
+            current_year = max_m.year
+            st.session_state.selected_months = [m for m in all_months if m.year == current_year]
+            st.rerun()
     
-    # Initialize date range if not in session state
-    if "date_range" not in st.session_state:
-        st.session_state.date_range = (min_m.to_pydatetime(), max_m.to_pydatetime())
+    # Display count
+    st.caption(f"Selected {len(st.session_state.selected_months)} of {len(all_months)} months")
     
-    start, end = st.slider(
-        "Month range",
-        min_value=min_m.to_pydatetime(),
-        max_value=max_m.to_pydatetime(),
-        value=st.session_state.date_range,
-        format="MMM YYYY",
-        key="date_slider"
-    )
+    # Scrollable container with month checkboxes
+    st.markdown("---")
+    month_container = st.container(height=200)  # Fixed height for scrolling
+    
+    with month_container:
+        # Group months by year for better organization
+        months_by_year = {}
+        for month in all_months:
+            year = month.year
+            if year not in months_by_year:
+                months_by_year[year] = []
+            months_by_year[year].append(month)
+        
+        # Display checkboxes grouped by year
+        for year in sorted(months_by_year.keys(), reverse=True):  # Most recent year first
+            st.caption(f"**{year}**")
+            for month in reversed(months_by_year[year]):  # Most recent month first within year
+                is_selected = month in st.session_state.selected_months
+                month_label = month.strftime("%B")
+                
+                # Count of records in this month
+                month_count = len(df[df["ftd_month"] == month])
+                
+                new_state = st.checkbox(
+                    f"{month_label} ({month_count:,} records)",
+                    value=is_selected,
+                    key=f"month_{month.strftime('%Y%m')}"
+                )
+                
+                # Update session state
+                if new_state and month not in st.session_state.selected_months:
+                    st.session_state.selected_months.append(month)
+                elif not new_state and month in st.session_state.selected_months:
+                    st.session_state.selected_months.remove(month)
+    
+    # Use selected months for filtering
+    selected_months = st.session_state.selected_months
+    if selected_months:
+        start = min(selected_months)
+        end = max(selected_months)
+    else:
+        # If no months selected, use full range but will filter to empty later
+        start, end = min_m, max_m
 
     chart_type = st.radio("Chart type", ["Line", "Stacked bars"], horizontal=True)
     
@@ -428,11 +472,16 @@ with st.sidebar:
         st.caption("• **Marketing**: All other sources")
 
 # Apply filters
-mask_time = (df["ftd_month"] >= pd.Timestamp(start)) & (df["ftd_month"] <= pd.Timestamp(end))
+# Filter by selected months (not just range)
+if selected_months:
+    mask_time = df["ftd_month"].isin(selected_months)
+else:
+    mask_time = pd.Series(False, index=df.index)  # No months selected = no data
+
 mask_source = df[source_col].isin(selected_sources) if selected_sources else pd.Series(True, index=df.index)
 dff = df.loc[mask_time & mask_source].copy()
 
-# Also get data for ALL sources in the timeframe (for active sources calculation)
+# Also get data for ALL sources in the selected months (for active sources calculation)
 dff_all_sources = df.loc[mask_time].copy()
 
 # Function to categorize sources
@@ -460,7 +509,8 @@ if group_sources:
     # Get unique categories from selected sources
     selected_categories = dff['source_category'].unique().tolist()
     
-    months = pd.period_range(dff["ftd_month"].min(), dff["ftd_month"].max(), freq="M").to_timestamp()
+    # Use only selected months, not a continuous range
+    months = sorted(selected_months) if selected_months else []
     # Ensure all (month, category) combos exist
     full = (
         pd.MultiIndex.from_product([months, selected_categories], names=["ftd_month", source_col])
@@ -478,7 +528,8 @@ else:
     counts = (
         dff.groupby(["ftd_month", source_col])["Record ID"].size().reset_index(name="clients")
     )
-    months = pd.period_range(dff["ftd_month"].min(), dff["ftd_month"].max(), freq="M").to_timestamp()
+    # Use only selected months, not a continuous range
+    months = sorted(selected_months) if selected_months else []
     # Ensure all (month, source) combos exist for proper stacking/lines
     full = (
         pd.MultiIndex.from_product([months, selected_sources], names=["ftd_month", source_col])
