@@ -1,5 +1,6 @@
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 
@@ -94,6 +95,12 @@ st.markdown("""
 
 st.title("FTD Acquisition Dashboard")
 st.caption("Monthly client acquisition by source (campaign / IB), anchored on **portal - ftd_time**. Dates parsed as **DD/MM/YYYY**.")
+
+# Initialize tour state
+if "tour_step" not in st.session_state:
+    st.session_state.tour_step = 0
+if "tour_active" not in st.session_state:
+    st.session_state.tour_active = False
 
 # --- CSV Format Guide ---
 with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
@@ -311,6 +318,307 @@ with st.expander("📊 Data Quality Report", expanded=False):
     st.info("💡 **Note:** This table shows ALL records in your data. The chart below only shows records from your SELECTED sources. If you've selected fewer sources, the chart numbers will be lower.")
     
     st.dataframe(monthly_df, hide_index=True, width="stretch")
+
+# --- Visual Tour Implementation ---
+def inject_tour_css_js():
+    tour_html = """
+    <style>
+        .tour-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 9998;
+            display: none;
+        }
+        
+        .tour-highlight {
+            position: absolute;
+            border: 3px solid #00d4ff;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.8);
+            z-index: 9999;
+            pointer-events: none;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 20px rgba(0, 212, 255, 0.8); }
+            50% { box-shadow: 0 0 40px rgba(0, 212, 255, 1); }
+            100% { box-shadow: 0 0 20px rgba(0, 212, 255, 0.8); }
+        }
+        
+        .tour-tooltip {
+            position: absolute;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            max-width: 400px;
+            z-index: 10000;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { 
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .tour-tooltip h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.2em;
+            color: white;
+        }
+        
+        .tour-tooltip p {
+            margin: 0 0 15px 0;
+            line-height: 1.5;
+            color: white;
+        }
+        
+        .tour-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: space-between;
+        }
+        
+        .tour-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        
+        .tour-btn-next {
+            background: white;
+            color: #667eea;
+        }
+        
+        .tour-btn-next:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(255, 255, 255, 0.3);
+        }
+        
+        .tour-btn-skip {
+            background: transparent;
+            color: white;
+            border: 1px solid white;
+        }
+        
+        .tour-btn-skip:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .tour-step-indicator {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 0.9em;
+            opacity: 0.9;
+            color: white;
+        }
+    </style>
+    
+    <div id="tourOverlay" class="tour-overlay"></div>
+    <div id="tourHighlight" class="tour-highlight"></div>
+    <div id="tourTooltip" class="tour-tooltip" style="display: none;">
+        <h3 id="tourTitle"></h3>
+        <p id="tourDescription"></p>
+        <div class="tour-buttons">
+            <button class="tour-btn tour-btn-skip" onclick="endTour()">Skip Tour</button>
+            <button class="tour-btn tour-btn-next" onclick="nextStep()">Next →</button>
+        </div>
+        <div class="tour-step-indicator">
+            Step <span id="currentStep">1</span> of <span id="totalSteps">7</span>
+        </div>
+    </div>
+    
+    <script>
+        const tourSteps = [
+            {
+                target: 'section[data-testid="stSidebar"]',
+                title: '🎛️ Filters Panel',
+                description: 'This sidebar contains all your filtering options. Select sources, choose date ranges, and customize the display. The font is optimized for maximum content visibility.',
+                position: 'right'
+            },
+            {
+                target: '[data-testid="stSidebar"] h3:contains("Source Selection")',
+                title: '📊 Source Selection',
+                description: 'Search and select which sources to analyze. Use the checkboxes to include/exclude sources, or use quick select buttons for common selections.',
+                position: 'right',
+                fallback: 'section[data-testid="stSidebar"]'
+            },
+            {
+                target: '[data-testid="stSidebar"] h3:contains("Date Range")',
+                title: '📅 Month Selection',
+                description: 'Select specific months to analyze. You can choose non-consecutive months for custom comparisons. Quick buttons help select common ranges.',
+                position: 'right',
+                fallback: 'section[data-testid="stSidebar"]'
+            },
+            {
+                target: '.stTabs',
+                title: '📈 Main Chart Area',
+                description: 'Interactive chart showing your data. Hover for details, toggle between line and bar charts. The red line shows totals when enabled.',
+                position: 'bottom',
+                fallback: 'div[data-testid="stHorizontalBlock"]:has(canvas)'
+            },
+            {
+                target: 'div:contains("Overview"):has(.metric)',
+                title: '📊 Performance Metrics',
+                description: 'Key performance indicators update based on your filters. See totals, averages, and active source counts at a glance.',
+                position: 'bottom',
+                fallback: 'div[data-testid="stHorizontalBlock"]:first'
+            },
+            {
+                target: 'div:contains("Table: counts by month")',
+                title: '📋 Data Table',
+                description: 'Pivot table showing detailed monthly breakdown. Includes totals and can be exported in multiple formats.',
+                position: 'top',
+                fallback: 'div[data-testid="stDataFrame"]'
+            },
+            {
+                target: 'button:contains("Download as CSV")',
+                title: '💾 Export Options',
+                description: 'Export your filtered data in CSV, Excel, or JSON format. Perfect for further analysis or reporting.',
+                position: 'top',
+                fallback: 'div[data-testid="stHorizontalBlock"]:has(button)'
+            }
+        ];
+        
+        let currentStepIndex = 0;
+        
+        function startTour() {
+            currentStepIndex = 0;
+            document.getElementById('tourOverlay').style.display = 'block';
+            document.getElementById('totalSteps').textContent = tourSteps.length;
+            showStep(currentStepIndex);
+        }
+        
+        function showStep(index) {
+            const step = tourSteps[index];
+            let targetElement = document.querySelector(step.target);
+            
+            // Fallback if primary selector doesn't work
+            if (!targetElement && step.fallback) {
+                targetElement = document.querySelector(step.fallback);
+            }
+            
+            if (!targetElement) {
+                // Skip to next step if element not found
+                if (index < tourSteps.length - 1) {
+                    currentStepIndex++;
+                    showStep(currentStepIndex);
+                    return;
+                } else {
+                    endTour();
+                    return;
+                }
+            }
+            
+            const rect = targetElement.getBoundingClientRect();
+            const highlight = document.getElementById('tourHighlight');
+            const tooltip = document.getElementById('tourTooltip');
+            
+            // Position highlight
+            highlight.style.left = rect.left - 5 + 'px';
+            highlight.style.top = rect.top - 5 + 'px';
+            highlight.style.width = rect.width + 10 + 'px';
+            highlight.style.height = rect.height + 10 + 'px';
+            highlight.style.display = 'block';
+            
+            // Update tooltip content
+            document.getElementById('tourTitle').textContent = step.title;
+            document.getElementById('tourDescription').textContent = step.description;
+            document.getElementById('currentStep').textContent = index + 1;
+            
+            // Position tooltip
+            tooltip.style.display = 'block';
+            
+            if (step.position === 'right') {
+                tooltip.style.left = rect.right + 20 + 'px';
+                tooltip.style.top = rect.top + 'px';
+            } else if (step.position === 'bottom') {
+                tooltip.style.left = rect.left + 'px';
+                tooltip.style.top = rect.bottom + 20 + 'px';
+            } else if (step.position === 'top') {
+                tooltip.style.left = rect.left + 'px';
+                tooltip.style.bottom = (window.innerHeight - rect.top + 20) + 'px';
+                tooltip.style.top = 'auto';
+            }
+            
+            // Adjust if tooltip goes off screen
+            const tooltipRect = tooltip.getBoundingClientRect();
+            if (tooltipRect.right > window.innerWidth) {
+                tooltip.style.left = (window.innerWidth - tooltipRect.width - 20) + 'px';
+            }
+            if (tooltipRect.bottom > window.innerHeight) {
+                tooltip.style.top = (window.innerHeight - tooltipRect.height - 20) + 'px';
+            }
+            
+            // Update button text for last step
+            const nextBtn = tooltip.querySelector('.tour-btn-next');
+            if (index === tourSteps.length - 1) {
+                nextBtn.textContent = 'Finish Tour';
+            } else {
+                nextBtn.textContent = 'Next →';
+            }
+        }
+        
+        function nextStep() {
+            currentStepIndex++;
+            if (currentStepIndex >= tourSteps.length) {
+                endTour();
+            } else {
+                showStep(currentStepIndex);
+            }
+        }
+        
+        function endTour() {
+            document.getElementById('tourOverlay').style.display = 'none';
+            document.getElementById('tourHighlight').style.display = 'none';
+            document.getElementById('tourTooltip').style.display = 'none';
+            
+            // Send message to Streamlit
+            window.parent.postMessage({type: 'streamlit:setComponentValue', value: 'tour_ended'}, '*');
+        }
+        
+        // Auto-start tour if flag is set
+        if (window.tourAutoStart) {
+            setTimeout(startTour, 1000);
+        }
+    </script>
+    """
+    
+    return tour_html
+
+# Tour control buttons
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    if st.button("🎯 Start Visual Tour", type="primary", use_container_width=True, key="start_tour"):
+        st.session_state.tour_active = True
+
+# Inject tour HTML/CSS/JS when active
+if st.session_state.tour_active:
+    components.html(
+        inject_tour_css_js() + """
+        <script>
+            window.tourAutoStart = true;
+            setTimeout(startTour, 500);
+        </script>
+        """,
+        height=0
+    )
+    st.session_state.tour_active = False  # Reset after injection
 
 # --- Sidebar filters ---
 source_col = "portal - source_marketing_campaign"
