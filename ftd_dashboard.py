@@ -311,7 +311,8 @@ def parse_dd_mm_yyyy_date(date_str, debug=False):
 
 @st.cache_data(show_spinner=False)
 def load_df(file):
-    df = pd.read_csv(file)
+    # Read CSV with ALL columns as strings first to prevent pandas auto-parsing dates incorrectly
+    df = pd.read_csv(file, dtype=str)
     original_count = len(df)
     
     # Expected columns - BOTH date columns must be present
@@ -351,6 +352,7 @@ def load_df(file):
     
     # Debug: Show actual raw date values
     print("🔍 RAW DATE DEBUGGING:")
+    print("📌 NOTE: Reading all CSV columns as strings to prevent pandas auto-parsing")
     print(f"First 10 raw values from '{ftd_date_col}' column:")
     for i in range(min(10, len(df))):
         raw_value = df[ftd_date_col].iloc[i]
