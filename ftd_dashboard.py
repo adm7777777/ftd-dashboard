@@ -131,6 +131,7 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
         - **Purpose**: Date when client became FTD
         - **Format**: DD/MM/YYYY (e.g., "25/08/2024")
         - **Used for**: FTD Dashboard
+        - **Valid Range**: 2023 onwards (earlier dates treated as invalid)
         """)
         
         st.markdown("#### 2️⃣ `DATE_CREATED` or `date_created` (Required)")
@@ -139,6 +140,7 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
         - **Format**: DD/MM/YYYY HH:MM:SS
         - **Example**: "25/08/2024 14:30:45"
         - **Used for**: KYC Dashboard
+        - **Valid Range**: 2023 onwards (earlier dates treated as invalid)
         - **Note**: Time component is ignored, case-insensitive
         """)
         
@@ -282,11 +284,21 @@ def load_df(file):
     
     # Parse FTD date column
     df[ftd_date_col] = pd.to_datetime(df[ftd_date_col], dayfirst=True, errors="coerce")
+    
+    # Mark dates before 2023 as invalid (likely placeholder dates like 1970-01-01)
+    min_valid_date = pd.Timestamp('2023-01-01')
+    ftd_before_2023 = (df[ftd_date_col] < min_valid_date).sum()
+    df.loc[df[ftd_date_col] < min_valid_date, ftd_date_col] = pd.NaT
+    
     invalid_ftd_dates = df[ftd_date_col].isna().sum()
     
     # Parse KYC date column (handles datetime with time component)
-    # First try to parse with time, then extract just the date
     df[kyc_date_col] = pd.to_datetime(df[kyc_date_col], dayfirst=True, errors="coerce")
+    
+    # Mark KYC dates before 2023 as invalid too
+    kyc_before_2023 = (df[kyc_date_col] < min_valid_date).sum()
+    df.loc[df[kyc_date_col] < min_valid_date, kyc_date_col] = pd.NaT
+    
     invalid_kyc_dates = df[kyc_date_col].isna().sum()
     
     # Fill missing sources
@@ -300,6 +312,8 @@ def load_df(file):
     df.attrs['original_count'] = original_count
     df.attrs['invalid_ftd_dates'] = invalid_ftd_dates
     df.attrs['invalid_kyc_dates'] = invalid_kyc_dates
+    df.attrs['ftd_before_2023'] = ftd_before_2023
+    df.attrs['kyc_before_2023'] = kyc_before_2023
     df.attrs['final_count'] = len(df)
     
     # Store the actual column names found for later use
@@ -349,8 +363,10 @@ with st.expander("📊 Data Quality Report", expanded=False):
     
     with col2:
         dropped = df.attrs.get(invalid_dates_key, 0)
+        before_2023_key = 'ftd_before_2023' if dashboard_type == "FTD Dashboard" else 'kyc_before_2023'
+        before_2023 = df.attrs.get(before_2023_key, 0)
         st.metric("Invalid Dates", f"{dropped:,}",
-                  f"{dropped/df.attrs.get('original_count', 1)*100:.1f}%" if dropped > 0 else None,
+                  f"Incl. {before_2023:,} before 2023" if before_2023 > 0 else f"{dropped/df.attrs.get('original_count', 1)*100:.1f}%",
                   delta_color="inverse" if dropped > 0 else "off")
     
     with col3:
@@ -363,7 +379,12 @@ with st.expander("📊 Data Quality Report", expanded=False):
         st.metric("Data Retention", f"{retention:.1f}%")
     
     if df.attrs.get(invalid_dates_key, 0) > 0:
-        st.warning(f"⚠️ **{df.attrs.get(invalid_dates_key, 0)} records have invalid dates** in '{active_date_col}' column. These dates could not be parsed.")
+        before_2023_key = 'ftd_before_2023' if dashboard_type == "FTD Dashboard" else 'kyc_before_2023'
+        before_2023 = df.attrs.get(before_2023_key, 0)
+        if before_2023 > 0:
+            st.warning(f"⚠️ **{df.attrs.get(invalid_dates_key, 0)} records have invalid dates** in '{active_date_col}' column, including {before_2023} dates before 2023 (likely placeholder dates like 1970-01-01).")
+        else:
+            st.warning(f"⚠️ **{df.attrs.get(invalid_dates_key, 0)} records have invalid dates** in '{active_date_col}' column. These dates could not be parsed.")
     
     st.markdown("#### Data Quality Metrics")
     col1, col2, col3 = st.columns(3)
