@@ -866,23 +866,12 @@ with st.sidebar:
             months_by_year[year].append(month)
         
         # Display checkboxes grouped by year
-        for year in sorted(months_by_year.keys(), reverse=True):  # Most recent year first
-            # Year header with select/deselect buttons
-            year_col1, year_col2, year_col3 = st.columns([3, 1, 1])
-            with year_col1:
-                st.markdown(f"**📅 {year}**")
-            with year_col2:
-                if st.button("All", key=f"select_year_{year}", help=f"Select all months in {year}", use_container_width=True):
-                    for month in months_by_year[year]:
-                        if month not in st.session_state.selected_months:
-                            st.session_state.selected_months.append(month)
-                    st.rerun()
-            with year_col3:
-                if st.button("None", key=f"deselect_year_{year}", help=f"Deselect all months in {year}", use_container_width=True):
-                    st.session_state.selected_months = [m for m in st.session_state.selected_months 
-                                                       if m not in months_by_year[year]]
-                    st.rerun()
+        for idx, year in enumerate(sorted(months_by_year.keys(), reverse=True)):  # Most recent year first
+            # Add spacing between year groups (but not before the first one)
+            if idx > 0:
+                st.markdown("")  # Add space between year groups
             
+            # Display months first
             for month in reversed(months_by_year[year]):  # Most recent month first within year
                 is_selected = month in st.session_state.selected_months
                 month_label = month.strftime("%B")
@@ -901,6 +890,22 @@ with st.sidebar:
                     st.session_state.selected_months.append(month)
                 elif not new_state and month in st.session_state.selected_months:
                     st.session_state.selected_months.remove(month)
+            
+            # Year header with select/deselect buttons AFTER the months
+            year_col1, year_col2, year_col3 = st.columns([3, 1, 1])
+            with year_col1:
+                st.markdown(f"**📅 {year}**")
+            with year_col2:
+                if st.button("All", key=f"select_year_{year}", help=f"Select all months in {year}", use_container_width=True):
+                    for month in months_by_year[year]:
+                        if month not in st.session_state.selected_months:
+                            st.session_state.selected_months.append(month)
+                    st.rerun()
+            with year_col3:
+                if st.button("None", key=f"deselect_year_{year}", help=f"Deselect all months in {year}", use_container_width=True):
+                    st.session_state.selected_months = [m for m in st.session_state.selected_months 
+                                                       if m not in months_by_year[year]]
+                    st.rerun()
     
     # Use selected months for filtering
     selected_months = st.session_state.selected_months
