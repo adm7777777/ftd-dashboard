@@ -317,6 +317,28 @@ def load_df(file):
     df = pd.read_csv(file, dtype=str)
     original_count = len(df)
     
+    # Just show me the first 5 rows of the ENTIRE CSV as-is
+    print("📄 RAW CSV DATA - First 5 rows:")
+    print(df.head().to_string())
+    
+    # Show EXACT column names (check for extra spaces/characters)  
+    print(f"\n📋 EXACT column names: {[repr(col) for col in df.columns]}")
+    
+    # Show first 10 values from the FTD column exactly as they appear
+    ftd_col = 'portal - ftd_time'
+    if ftd_col in df.columns:
+        print(f"\n📅 First 10 values from '{ftd_col}':")
+        for i in range(min(10, len(df))):
+            val = df[ftd_col].iloc[i]
+            print(f"  Row {i+1}: {repr(val)}")
+    else:
+        print(f"\n❌ Column '{ftd_col}' not found!")
+        print("Looking for columns containing 'ftd':")
+        for col in df.columns:
+            if 'ftd' in col.lower():
+                print(f"  Found: {repr(col)}")
+                print(f"    Sample values: {df[col].head(3).tolist()}")
+    
     # Expected columns - BOTH date columns must be present
     ftd_date_col = "portal - ftd_time"
     kyc_date_col = "DATE_CREATED"
