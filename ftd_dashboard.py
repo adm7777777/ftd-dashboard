@@ -282,22 +282,47 @@ def load_df(file):
     kyc_date_col = actual_kyc_col
     source_col = actual_source_col
     
-    # Parse FTD date column
-    df[ftd_date_col] = pd.to_datetime(df[ftd_date_col], dayfirst=True, errors="coerce")
+    # Parse FTD date column - try explicit DD/MM/YYYY format first
+    try:
+        df[ftd_date_col] = pd.to_datetime(df[ftd_date_col], format='%d/%m/%Y', errors='coerce')
+    except:
+        # Fallback to dayfirst if explicit format fails
+        df[ftd_date_col] = pd.to_datetime(df[ftd_date_col], dayfirst=True, errors="coerce")
     
-    # Mark dates before 2023 as invalid (likely placeholder dates like 1970-01-01)
+    # Mark dates before 2023 or after current year + 1 as invalid
     min_valid_date = pd.Timestamp('2023-01-01')
+    max_valid_date = pd.Timestamp.now() + pd.DateOffset(years=1)  # Allow up to 1 year in future
+    
     ftd_before_2023 = (df[ftd_date_col] < min_valid_date).sum()
+    ftd_future = (df[ftd_date_col] > max_valid_date).sum()
+    
     df.loc[df[ftd_date_col] < min_valid_date, ftd_date_col] = pd.NaT
+    df.loc[df[ftd_date_col] > max_valid_date, ftd_date_col] = pd.NaT
     
     invalid_ftd_dates = df[ftd_date_col].isna().sum()
     
-    # Parse KYC date column (handles datetime with time component)
-    df[kyc_date_col] = pd.to_datetime(df[kyc_date_col], dayfirst=True, errors="coerce")
+    # Parse KYC date column - handle datetime with time
+    # Store original values first
+    kyc_original = df[kyc_date_col].copy()
+    try:
+        # Try with time format first
+        df[kyc_date_col] = pd.to_datetime(kyc_original, format='%d/%m/%Y %H:%M:%S', errors='coerce')
+        # If that doesn't work for all, try without time
+        mask_nat = df[kyc_date_col].isna()
+        if mask_nat.any():
+            df.loc[mask_nat, kyc_date_col] = pd.to_datetime(
+                kyc_original[mask_nat], format='%d/%m/%Y', errors='coerce'
+            )
+    except:
+        # Fallback to dayfirst
+        df[kyc_date_col] = pd.to_datetime(df[kyc_date_col], dayfirst=True, errors="coerce")
     
-    # Mark KYC dates before 2023 as invalid too
+    # Mark KYC dates before 2023 or too far in future as invalid too
     kyc_before_2023 = (df[kyc_date_col] < min_valid_date).sum()
+    kyc_future = (df[kyc_date_col] > max_valid_date).sum()
+    
     df.loc[df[kyc_date_col] < min_valid_date, kyc_date_col] = pd.NaT
+    df.loc[df[kyc_date_col] > max_valid_date, kyc_date_col] = pd.NaT
     
     invalid_kyc_dates = df[kyc_date_col].isna().sum()
     
@@ -314,6 +339,8 @@ def load_df(file):
     df.attrs['invalid_kyc_dates'] = invalid_kyc_dates
     df.attrs['ftd_before_2023'] = ftd_before_2023
     df.attrs['kyc_before_2023'] = kyc_before_2023
+    df.attrs['ftd_future'] = ftd_future
+    df.attrs['kyc_future'] = kyc_future
     df.attrs['final_count'] = len(df)
     
     # Store the actual column names found for later use
@@ -380,9 +407,18 @@ with st.expander("📊 Data Quality Report", expanded=False):
     
     if df.attrs.get(invalid_dates_key, 0) > 0:
         before_2023_key = 'ftd_before_2023' if dashboard_type == "FTD Dashboard" else 'kyc_before_2023'
+        future_key = 'ftd_future' if dashboard_type == "FTD Dashboard" else 'kyc_future'
         before_2023 = df.attrs.get(before_2023_key, 0)
+        future = df.attrs.get(future_key, 0)
+        
+        details = []
         if before_2023 > 0:
-            st.warning(f"⚠️ **{df.attrs.get(invalid_dates_key, 0)} records have invalid dates** in '{active_date_col}' column, including {before_2023} dates before 2023 (likely placeholder dates like 1970-01-01).")
+            details.append(f"{before_2023} before 2023")
+        if future > 0:
+            details.append(f"{future} too far in future")
+            
+        if details:
+            st.warning(f"⚠️ **{df.attrs.get(invalid_dates_key, 0)} records have invalid dates** in '{active_date_col}' column, including {' and '.join(details)}.")
         else:
             st.warning(f"⚠️ **{df.attrs.get(invalid_dates_key, 0)} records have invalid dates** in '{active_date_col}' column. These dates could not be parsed.")
     
