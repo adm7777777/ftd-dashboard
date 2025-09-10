@@ -133,13 +133,13 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
         - **Used for**: FTD Dashboard
         """)
         
-        st.markdown("#### 2️⃣ `DATE_CREATED` (Required)")
+        st.markdown("#### 2️⃣ `DATE_CREATED` or `date_created` (Required)")
         st.markdown("""
         - **Purpose**: Date when client completed KYC
         - **Format**: DD/MM/YYYY HH:MM:SS
         - **Example**: "25/08/2024 14:30:45"
         - **Used for**: KYC Dashboard
-        - **Note**: Time component is ignored
+        - **Note**: Time component is ignored, case-insensitive
         """)
         
         st.markdown("#### 3️⃣ `portal - source_marketing_campaign` (Required)")
@@ -167,8 +167,11 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
         """)
         
         st.warning("""
-        **⚠️ Important**: Both date columns (`portal - ftd_time` AND `DATE_CREATED`) 
-        MUST be present in your CSV file, even if you only use one dashboard.
+        **⚠️ Important**: Both date columns MUST be present in your CSV file:
+        - `portal - ftd_time` (for FTD)
+        - `DATE_CREATED` or `date_created` (for KYC)
+        
+        Column names are case-insensitive. Both columns required even if using only one dashboard.
         """)
     
     st.markdown("---")
@@ -247,17 +250,35 @@ def load_df(file):
     kyc_date_col = "DATE_CREATED"
     source_col = "portal - source_marketing_campaign"
     
+    # Check for case-insensitive column matching
+    def find_column_case_insensitive(df, col_name):
+        """Find column name with case-insensitive matching"""
+        for col in df.columns:
+            if col.lower() == col_name.lower():
+                return col
+        return None
+    
+    # Find actual column names (handling case differences)
+    actual_ftd_col = find_column_case_insensitive(df, ftd_date_col)
+    actual_kyc_col = find_column_case_insensitive(df, kyc_date_col)
+    actual_source_col = find_column_case_insensitive(df, source_col)
+    
     # Check all required columns exist
     missing_cols = []
-    if ftd_date_col not in df.columns:
+    if not actual_ftd_col:
         missing_cols.append(ftd_date_col)
-    if kyc_date_col not in df.columns:
+    if not actual_kyc_col:
         missing_cols.append(kyc_date_col)
-    if source_col not in df.columns:
+    if not actual_source_col:
         missing_cols.append(source_col)
     
     if missing_cols:
         raise ValueError(f"CSV is missing required columns: {missing_cols}. Found columns: {list(df.columns)}")
+    
+    # Use the actual column names found
+    ftd_date_col = actual_ftd_col
+    kyc_date_col = actual_kyc_col
+    source_col = actual_source_col
     
     # Parse FTD date column
     df[ftd_date_col] = pd.to_datetime(df[ftd_date_col], dayfirst=True, errors="coerce")
