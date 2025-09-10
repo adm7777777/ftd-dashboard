@@ -4,6 +4,15 @@ import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 
+def safe_int_convert(value, default=0):
+    """Safely convert value to int with fallback for None/NaN values"""
+    try:
+        if value is None or pd.isna(value):
+            return default
+        return int(float(value))
+    except (ValueError, TypeError):
+        return default
+
 st.set_page_config(page_title="FTD Acquisition Dashboard", layout="wide")
 
 # Custom CSS to reduce font size in sidebar by 35%
@@ -880,33 +889,41 @@ if len(counts) > 0 and span_months > 1:
     monthly_totals = counts.groupby("ftd_month")["clients"].sum().reset_index()
     monthly_totals["mom_growth"] = monthly_totals["clients"].pct_change() * 100
     
-    # Calculate metrics
+    # Calculate metrics safely
     latest_month = monthly_totals.iloc[-1]["clients"] if len(monthly_totals) > 0 else 0
     prev_month = monthly_totals.iloc[-2]["clients"] if len(monthly_totals) > 1 else 0
     mom_change = ((latest_month - prev_month) / prev_month * 100) if prev_month > 0 else 0
     
-    best_month = monthly_totals.loc[monthly_totals["clients"].idxmax()]
-    worst_month = monthly_totals.loc[monthly_totals["clients"].idxmin()]
+    # Safe calculation of best/worst months
+    if len(monthly_totals) > 0 and not monthly_totals["clients"].empty:
+        best_month = monthly_totals.loc[monthly_totals["clients"].idxmax()]
+        worst_month = monthly_totals.loc[monthly_totals["clients"].idxmin()]
+    else:
+        # Create dummy data for display
+        dummy_date = pd.Timestamp.now()
+        best_month = {"clients": 0, "ftd_month": dummy_date}
+        worst_month = {"clients": 0, "ftd_month": dummy_date}
     
     m1, m2, m3, m4 = st.columns(4)
     m1.metric(
         "Latest Month", 
-        f"{latest_month:.0f} clients",
+        f"{safe_int_convert(latest_month)} clients",
         f"{mom_change:+.1f}%" if mom_change != 0 else "0%"
     )
     m2.metric(
         "Best Month", 
-        f"{best_month['clients']:.0f} clients",
+        f"{safe_int_convert(best_month['clients'])} clients",
         f"{best_month['ftd_month']:%b %Y}"
     )
     m3.metric(
         "Worst Month", 
-        f"{worst_month['clients']:.0f} clients",
+        f"{safe_int_convert(worst_month['clients'])} clients",
         f"{worst_month['ftd_month']:%b %Y}"
     )
+    avg_growth = monthly_totals['mom_growth'].mean() if len(monthly_totals) > 0 else 0
     m4.metric(
         "Avg Growth",
-        f"{monthly_totals['mom_growth'].mean():.1f}%",
+        f"{avg_growth:.1f}%" if not pd.isna(avg_growth) else "0.0%",
         "month-over-month"
     )
 
@@ -1104,10 +1121,10 @@ if len(display_sources) > 0:
         label = "Category" if group_sources else "Source"
         source_stats.append({
             label: source,
-            "Total Clients": int(total),
-            "Avg/Month": f"{avg:.1f}",
-            "Best Month": int(max_val),
-            "Worst Month": int(min_val),
+            "Total Clients": safe_int_convert(total),
+            "Avg/Month": f"{avg:.1f}" if not pd.isna(avg) else "0.0",
+            "Best Month": safe_int_convert(max_val),
+            "Worst Month": safe_int_convert(min_val),
             "Trend": trend
         })
     
