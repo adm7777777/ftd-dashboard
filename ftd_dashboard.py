@@ -635,6 +635,7 @@ with st.sidebar:
         all_months = pd.date_range(start=min_m, end=max_m, freq='MS').to_list()
     else:
         all_months = []
+        st.warning(f"No valid dates found for {dashboard_type}. Please check your data.")
     
     # Initialize selected months in session state
     if "selected_months" not in st.session_state:
@@ -707,8 +708,12 @@ with st.sidebar:
         start = min(selected_months)
         end = max(selected_months)
     else:
-        # If no months selected, use full range but will filter to empty later
-        start, end = min_m, max_m
+        # If no months selected or no valid data, use dummy dates
+        if len(valid_df_sidebar) > 0:
+            start, end = min_m, max_m
+        else:
+            # No valid data at all, use current date as dummy
+            start = end = pd.Timestamp.now()
 
     chart_type = st.radio("Chart type", ["Line", "Stacked bars"], horizontal=True)
     
