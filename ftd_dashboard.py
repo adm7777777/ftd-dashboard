@@ -858,7 +858,22 @@ with st.sidebar:
         
         # Display checkboxes grouped by year
         for year in sorted(months_by_year.keys(), reverse=True):  # Most recent year first
-            st.caption(f"**{year}**")
+            # Year header with select/deselect buttons
+            year_col1, year_col2, year_col3 = st.columns([3, 1, 1])
+            with year_col1:
+                st.markdown(f"**📅 {year}**")
+            with year_col2:
+                if st.button("All", key=f"select_year_{year}", help=f"Select all months in {year}", use_container_width=True):
+                    for month in months_by_year[year]:
+                        if month not in st.session_state.selected_months:
+                            st.session_state.selected_months.append(month)
+                    st.rerun()
+            with year_col3:
+                if st.button("None", key=f"deselect_year_{year}", help=f"Deselect all months in {year}", use_container_width=True):
+                    st.session_state.selected_months = [m for m in st.session_state.selected_months 
+                                                       if m not in months_by_year[year]]
+                    st.rerun()
+            
             for month in reversed(months_by_year[year]):  # Most recent month first within year
                 is_selected = month in st.session_state.selected_months
                 month_label = month.strftime("%B")
