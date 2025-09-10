@@ -140,7 +140,7 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
         - **Purpose**: Date when client became FTD
         - **Format**: DD/MM/YYYY (e.g., "25/08/2024")
         - **Used for**: FTD Dashboard
-        - **Valid Range**: 2023 onwards (earlier dates treated as invalid)
+        - **Valid Range**: 2023-2026 (earlier dates treated as invalid)
         """)
         
         st.markdown("#### 2️⃣ `DATE_CREATED` or `date_created` (Required)")
@@ -149,7 +149,7 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
         - **Format**: DD/MM/YYYY HH:MM:SS
         - **Example**: "25/08/2024 14:30:45"
         - **Used for**: KYC Dashboard
-        - **Valid Range**: 2023 onwards (earlier dates treated as invalid)
+        - **Valid Range**: 2023-2026 (earlier dates treated as invalid)
         - **Note**: Time component is ignored, case-insensitive
         """)
         
@@ -351,9 +351,9 @@ def load_df(file):
     parsed_count = df[ftd_date_col].notna().sum()
     print(f"DEBUG: FTD date parsing FINAL - {parsed_count}/{len(df)} dates successfully parsed ({parsed_count/len(df)*100:.1f}%)")
     
-    # Mark dates before 2023 or after current year + 1 as invalid
+    # Mark dates before 2023 or after reasonable future as invalid
     min_valid_date = pd.Timestamp('2023-01-01')
-    max_valid_date = pd.Timestamp.now() + pd.DateOffset(years=1)  # Allow up to 1 year in future
+    max_valid_date = pd.Timestamp('2026-12-31')  # Allow up to end of 2026
     
     ftd_before_2023 = (df[ftd_date_col] < min_valid_date).sum()
     ftd_future = (df[ftd_date_col] > max_valid_date).sum()
