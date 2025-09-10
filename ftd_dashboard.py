@@ -484,6 +484,15 @@ alt.data_transformers.disable_max_rows()
 # Prepare data for chart
 chart_data = counts.copy()
 
+# Debug info
+if st.checkbox("Show debug info", value=False, key="debug_info"):
+    st.write(f"Number of rows in chart_data: {len(chart_data)}")
+    st.write(f"Display sources: {display_sources}")
+    st.write(f"Show total: {show_total}")
+    if not chart_data.empty:
+        st.write("Chart data preview:")
+        st.dataframe(chart_data.head())
+
 # Add total line if requested
 if show_total and (len(display_sources) > 1 or group_sources):
     # Calculate monthly totals
@@ -523,7 +532,14 @@ else:
         range_colors = [color_mapping.get(s, '#808080') for s in domain]
         color_scale = alt.Scale(domain=domain, range=range_colors)
     else:
-        color_scale = None
+        # Use default color scale for individual sources without total
+        if len(display_sources) > 0:
+            color_scale = alt.Scale(
+                domain=display_sources,
+                range=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"][:len(display_sources)]
+            )
+        else:
+            color_scale = None
 
 chart_base = alt.Chart(chart_data).encode(
     x=alt.X("ftd_month:T", 
@@ -531,7 +547,7 @@ chart_base = alt.Chart(chart_data).encode(
             scale=alt.Scale(padding=20)),
     y=alt.Y("clients:Q", 
             axis=alt.Axis(title="Clients"), 
-            stack=None if chart_type == "Line" or (show_total and len(selected_sources) > 1) else "zero"),
+            stack=None if chart_type == "Line" else "zero"),
     color=alt.Color(f"{source_col}:N", 
                    legend=alt.Legend(title="Source"),
                    scale=color_scale),
