@@ -15,6 +15,52 @@ def safe_int_convert(value, default=0):
 
 st.set_page_config(page_title="FTD Acquisition Dashboard", layout="wide")
 
+# Password Protection
+def check_password():
+    """Returns `True` if the user had the correct password."""
+    
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if st.session_state["password"] == "OQ123":
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Don't store password
+        else:
+            st.session_state["password_correct"] = False
+
+    # First run or password not yet entered
+    if "password_correct" not in st.session_state:
+        # Show password input
+        st.markdown("## 🔒 Authentication Required")
+        st.text_input(
+            "Please enter password to access the dashboard:",
+            type="password",
+            on_change=password_entered,
+            key="password"
+        )
+        st.info("💡 Contact your administrator for access credentials.")
+        return False
+    
+    # Password not correct
+    elif not st.session_state["password_correct"]:
+        st.markdown("## 🔒 Authentication Required")
+        st.text_input(
+            "Please enter password to access the dashboard:",
+            type="password",
+            on_change=password_entered,
+            key="password"
+        )
+        st.error("❌ Incorrect password. Please try again.")
+        st.info("💡 Contact your administrator for access credentials.")
+        return False
+    
+    # Password correct
+    else:
+        return True
+
+# Check password before showing the app
+if not check_password():
+    st.stop()
+
 # Custom CSS to reduce font size in sidebar by 35%
 st.markdown("""
 <style>
@@ -816,6 +862,14 @@ group_sources = False  # Initialize here so it's available outside sidebar
 
 with st.sidebar:
     st.header("Filters")
+    
+    # Add logout button at the top of sidebar
+    if st.button("🚪 Logout", use_container_width=True):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+    
+    st.markdown("---")
     # Source selection
     totals = df.groupby(source_col, dropna=False)["Record ID"].size().sort_values(ascending=False)
     all_sources = totals.index.tolist()
