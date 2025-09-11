@@ -133,6 +133,51 @@ if "tour_step" not in st.session_state:
 if "tour_active" not in st.session_state:
     st.session_state.tour_active = False
 
+# Getting Started Guide for new users
+with st.expander("🚀 **Getting Started - Quick Guide**", expanded=False):
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("""
+        ### 📤 How to Upload Your Data
+        1. **Prepare your CSV** with these columns:
+           - `portal - ftd_time` (FTD dates)
+           - `DATE_CREATED` (KYC dates)
+           - `portal - source_marketing_campaign` (sources)
+           - Dates should be DD/MM/YYYY format
+        
+        2. **Click "Browse files"** below or drag & drop
+        
+        3. **Wait for processing** (~2-3 seconds)
+        
+        ### 📊 Understanding the Dashboards
+        - **FTD Dashboard**: Track first-time deposits
+        - **KYC Dashboard**: Monitor KYC approvals
+        - **Comparison**: See conversion rates
+        """)
+    
+    with col2:
+        st.markdown("""
+        ### 🎛️ Using the Filters (Left Sidebar)
+        1. **Source Selection** (FTD/KYC only):
+           - Search for specific sources
+           - Use "Select All" or "Top N" buttons
+           - Individual checkboxes for fine control
+        
+        2. **Date Range**:
+           - Quick buttons: 2025, Last 6M, YTD
+           - Year buttons: Select/deselect entire years
+           - Individual month checkboxes
+        
+        ### 💡 Pro Tips
+        - **Default view** shows all 2025 data
+        - **Hover on charts** to see exact values
+        - **Export data** in CSV, Excel, or JSON
+        - **1/1/1970 dates** = No FTD yet (placeholders)
+        """)
+    
+    st.info("📌 **Quick Start**: Just upload your CSV and the dashboard will automatically show your 2025 data. Use the left sidebar to filter by source or date range.")
+
 # --- CSV Format Guide ---
 with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
     st.markdown("### Required CSV Fields")
@@ -541,8 +586,28 @@ else:
         df = load_df("source.csv")
         st.info("Using local 'source.csv' found in the same folder (since you didn't upload a file here).")
     except Exception:
-        st.warning("Please upload your CSV to proceed. Check the 📚 CSV Format Guide above for requirements.")
-        st.info("💡 Need help? Expand the CSV Format Guide above to see the required format and download a sample template.")
+        # Welcome message for new users
+        st.markdown("## 👋 Welcome to the FTD & KYC Analytics Dashboard!")
+        
+        st.markdown("""
+        ### 🎯 Quick Start in 3 Steps:
+        1. **Upload your CSV file** using the file uploader above
+        2. **View your data** - Dashboard loads automatically with 2025 data
+        3. **Filter as needed** - Use the left sidebar to refine your view
+        
+        ### 📋 Your CSV Should Have:
+        - **FTD dates**: Column named `portal - ftd_time`
+        - **KYC dates**: Column named `DATE_CREATED` 
+        - **Sources**: Column named `portal - source_marketing_campaign`
+        - **Date format**: DD/MM/YYYY (e.g., 31/12/2025)
+        
+        ### ❓ Need Help?
+        - Expand **"🚀 Getting Started"** above for a detailed guide
+        - Check **"📚 CSV Format Guide"** for data requirements
+        - Download a sample template from the CSV Format Guide
+        """)
+        
+        st.info("💡 **Tip**: The dashboard automatically filters to 2025 data and selects all sources by default, so you can see your results immediately after upload!")
         st.stop()
 
 # Data Quality Check
@@ -1507,59 +1572,122 @@ if dashboard_type != "KYC & FTD Comparison":
 # Download section with multiple formats
 st.markdown("### Export Data")
 
-if not pivot.empty:
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        # CSV download
-        csv_bytes = pivot.reset_index().to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "📄 Download CSV", 
-            data=csv_bytes, 
-            file_name=f"ftd_by_source_{pd.Timestamp.now():%Y%m%d}.csv", 
-            mime="text/csv",
-            use_container_width=True
-        )
-
-    with col2:
-        # Excel download
-        import io
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            pivot.reset_index().to_excel(writer, sheet_name='Monthly Data', index=False)
-            if len(display_sources) > 0:
-                source_df.to_excel(writer, sheet_name='Source Rankings', index=False)
-        excel_bytes = buffer.getvalue()
-        st.download_button(
-            "📊 Download Excel",
-            data=excel_bytes,
-            file_name=f"ftd_analysis_{pd.Timestamp.now():%Y%m%d}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-
-    with col3:
-        # JSON download
-        import json
-        json_data = {
-            "summary": {
-                "total_clients": total_clients,
-                "period": f"{min(months):%Y-%m-%d} to {max(months):%Y-%m-%d}" if len(months) > 0 else "No data",
-                "sources_count": len(display_sources)
-            },
-            "monthly_data": pivot.reset_index().to_dict(orient="records"),
-            "source_rankings": source_df.to_dict(orient="records") if len(display_sources) > 0 else []
-        }
-        json_str = json.dumps(json_data, indent=2, default=str)
-        st.download_button(
-            "🔧 Download JSON",
-            data=json_str,
-            file_name=f"ftd_data_{pd.Timestamp.now():%Y%m%d}.json",
-            mime="application/json",
-            use_container_width=True
-        )
+# Handle export differently for comparison dashboard
+if dashboard_type == "KYC & FTD Comparison":
+    # Create export data for comparison dashboard
+    if 'comparison_data' in locals() and not comparison_data.empty:
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            # CSV download for comparison
+            csv_bytes = comparison_data.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "📄 Download CSV", 
+                data=csv_bytes, 
+                file_name=f"kyc_ftd_comparison_{pd.Timestamp.now():%Y%m%d}.csv", 
+                mime="text/csv",
+                use_container_width=True
+            )
+        
+        with col2:
+            # Excel download for comparison
+            import io
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                comparison_data.to_excel(writer, sheet_name='KYC vs FTD', index=False)
+            excel_bytes = buffer.getvalue()
+            st.download_button(
+                "📊 Download Excel",
+                data=excel_bytes,
+                file_name=f"kyc_ftd_comparison_{pd.Timestamp.now():%Y%m%d}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        
+        with col3:
+            # JSON download for comparison
+            import json
+            json_data = {
+                "summary": {
+                    "total_kyc": safe_int_convert(total_kyc) if 'total_kyc' in locals() else 0,
+                    "total_ftd": safe_int_convert(total_ftd) if 'total_ftd' in locals() else 0,
+                    "conversion_rate": overall_conversion if 'overall_conversion' in locals() else 0
+                },
+                "data": comparison_data.to_dict(orient='records')
+            }
+            json_str = json.dumps(json_data, indent=2, default=str)
+            st.download_button(
+                "📋 Download JSON",
+                data=json_str,
+                file_name=f"kyc_ftd_comparison_{pd.Timestamp.now():%Y%m%d}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+    else:
+        st.info("No comparison data available for export.")
 else:
-    st.info("📥 **No data to export.** Please check your filters and data quality.")
+    # Regular export for FTD/KYC dashboards
+    # Initialize pivot if not defined
+    if 'pivot' not in locals():
+        pivot = pd.DataFrame()
+    
+    # Initialize source_df if not defined
+    if 'source_df' not in locals():
+        source_df = pd.DataFrame()
+    
+    if not pivot.empty:
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            # CSV download
+            csv_bytes = pivot.reset_index().to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "📄 Download CSV", 
+                data=csv_bytes, 
+                file_name=f"ftd_by_source_{pd.Timestamp.now():%Y%m%d}.csv", 
+                mime="text/csv",
+                use_container_width=True
+            )
+
+        with col2:
+            # Excel download
+            import io
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                pivot.reset_index().to_excel(writer, sheet_name='Monthly Data', index=False)
+                if len(display_sources) > 0 and not source_df.empty:
+                    source_df.to_excel(writer, sheet_name='Source Rankings', index=False)
+            excel_bytes = buffer.getvalue()
+            st.download_button(
+                "📊 Download Excel",
+                data=excel_bytes,
+                file_name=f"ftd_analysis_{pd.Timestamp.now():%Y%m%d}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+        with col3:
+            # JSON download
+            import json
+            json_data = {
+                "summary": {
+                    "total_clients": total_clients,
+                    "period": f"{min(months):%Y-%m-%d} to {max(months):%Y-%m-%d}" if len(months) > 0 else "No data",
+                    "sources_count": len(display_sources)
+                },
+                "monthly_data": pivot.reset_index().to_dict(orient="records"),
+                "source_rankings": source_df.to_dict(orient="records") if len(display_sources) > 0 else []
+            }
+            json_str = json.dumps(json_data, indent=2, default=str)
+            st.download_button(
+                "🔧 Download JSON",
+                data=json_str,
+                file_name=f"ftd_data_{pd.Timestamp.now():%Y%m%d}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+    else:
+        st.info("📥 **No data to export.** Please check your filters and data quality.")
 
 # Footer with quick reference
 with st.expander("ℹ️ Quick Reference", expanded=False):
