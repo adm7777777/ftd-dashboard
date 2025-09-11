@@ -41,7 +41,6 @@ def check_password():
             key="password"
         )
         st.info("💡 Contact your administrator for access credentials.")
-        st.caption("Version 1.5.3 - DD/MM/YYYY date format enforced")
         return False
     
     # Password not correct
@@ -55,7 +54,6 @@ def check_password():
         )
         st.error("❌ Incorrect password. Please try again.")
         st.info("💡 Contact your administrator for access credentials.")
-        st.caption("Version 1.5.3 - DD/MM/YYYY date format enforced")
         return False
     
     # Password correct
