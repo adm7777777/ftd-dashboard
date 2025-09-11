@@ -1070,9 +1070,10 @@ with st.sidebar:
     if dashboard_type == "KYC & FTD Comparison":
         comparison_view = st.radio(
             "View Mode",
-            ["Absolute Numbers", "Conversion Rate %"],
+            ["Conversion Rate %", "Absolute Numbers"],
+            index=0,  # Default to Conversion Rate %
             horizontal=True,
-            help="Switch between absolute client counts and conversion rate percentages"
+            help="Switch between conversion rate percentages and absolute client counts"
         )
     else:
         comparison_view = "Absolute Numbers"  # Default for other dashboards
