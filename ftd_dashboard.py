@@ -22,7 +22,9 @@ def check_password():
     
     def password_entered():
         """Checks whether a password entered by the user is correct."""
-        if st.session_state["password"] == "OQ123":
+        # Debug: Show hint for correct password format
+        entered_pw = st.session_state.get("password", "")
+        if entered_pw == "OQ123":
             st.session_state["password_correct"] = True
             del st.session_state["password"]  # Don't store password
         else:
@@ -39,6 +41,7 @@ def check_password():
             key="password"
         )
         st.info("💡 Contact your administrator for access credentials.")
+        st.caption("Version 1.5.2 - Password: OQ123 (case sensitive)")
         return False
     
     # Password not correct
@@ -52,6 +55,7 @@ def check_password():
         )
         st.error("❌ Incorrect password. Please try again.")
         st.info("💡 Contact your administrator for access credentials.")
+        st.caption("Version 1.5.2 - Password: OQ123 (case sensitive)")
         return False
     
     # Password correct
