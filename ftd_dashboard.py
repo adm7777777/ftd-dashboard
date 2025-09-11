@@ -382,10 +382,12 @@ def parse_dd_mm_yyyy_date(date_str, debug=False):
             return pd.NaT
             
         # Remove time component if present (handle various formats)
-        for time_sep in [' ', 'T']:
-            if time_sep in date_str:
-                date_str = date_str.split(time_sep)[0]
-                break
+        # Handle formats like "19/8/2024 14:39" or "19/8/2024 2:39:45 PM"
+        if ' ' in date_str:
+            # Take only the date part (before the space)
+            date_str = date_str.split(' ')[0]
+            if debug:
+                print(f"  Removed time component, now: {date_str}")
         
         # Try multiple separators
         parts = None
@@ -468,8 +470,14 @@ def load_df(file):
     debug_info.append(f"\n📋 EXACT column names: {[repr(col) for col in df.columns]}")
     
     # Show first 10 values from the FTD column exactly as they appear
-    ftd_col = 'portal - ftd_time'
-    if ftd_col in df.columns:
+    # First, let's find the exact column name
+    ftd_col = None
+    for col in df.columns:
+        if 'ftd_time' in col.lower() or 'ftd' in col.lower():
+            ftd_col = col
+            break
+    
+    if ftd_col:
         debug_info.append(f"\n📅 First 10 values from '{ftd_col}':")
         for i in range(min(10, len(df))):
             val = df[ftd_col].iloc[i]
@@ -499,9 +507,15 @@ def load_df(file):
     print('\n'.join(debug_info))
     
     # Expected columns - BOTH date columns must be present
+    # Note: Handle variations in column names
     ftd_date_col = "portal - ftd_time"
     kyc_date_col = "DATE_CREATED"
     source_col = "portal - source_marketing_campaign"
+    
+    # Alternative names to check
+    ftd_alternatives = ["portal - ftd_time", "Portal - ftd_time", "portal-ftd_time", "ftd_time"]
+    kyc_alternatives = ["DATE_CREATED", "date_created", "Date_Created", "Create Date"]
+    source_alternatives = ["portal - source_marketing_campaign", "Marketing campaign", "portal - sour", "source"]
     
     # Check for case-insensitive column matching
     def find_column_case_insensitive(df, col_name):
@@ -602,7 +616,15 @@ def load_df(file):
     print(f'✅ Final: {valid_dates_after_filter} valid FTD dates after filtering ({ftd_before_2023} before 2023, {ftd_future} after 2026)')
     
     # Parse KYC date column using EXPLICIT DD/MM/YYYY parser
-    print(f"DEBUG: Sample raw KYC dates: {df[kyc_date_col].head(10).tolist()}")
+    print(f"DEBUG: Sample raw KYC dates from '{kyc_date_col}': {df[kyc_date_col].head(10).tolist()}")
+    print(f"DEBUG: KYC column dtype before parsing: {df[kyc_date_col].dtype}")
+    
+    # Test parse a few KYC dates with debug mode
+    print("DEBUG: Testing KYC date parsing:")
+    for i, date_str in enumerate(df[kyc_date_col].head(5)):
+        print(f"  KYC Date {i+1}: '{date_str}'")
+        result = parse_dd_mm_yyyy_date(date_str, debug=True)
+        print(f"    Result: {result}")
     
     # Apply the explicit parser to all KYC dates
     df[kyc_date_col] = df[kyc_date_col].apply(parse_dd_mm_yyyy_date)
