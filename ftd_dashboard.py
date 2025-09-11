@@ -1,5 +1,5 @@
 
-# Version 1.5.1 - Includes all date parsing fixes
+# Version 1.5.3 - Enhanced DD/MM/YYYY parser with better error handling
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -41,7 +41,7 @@ def check_password():
             key="password"
         )
         st.info("💡 Contact your administrator for access credentials.")
-        st.caption("Version 1.5.2 - Password: OQ123 (case sensitive)")
+        st.caption("Version 1.5.3 - DD/MM/YYYY date format enforced")
         return False
     
     # Password not correct
@@ -55,7 +55,7 @@ def check_password():
         )
         st.error("❌ Incorrect password. Please try again.")
         st.info("💡 Contact your administrator for access credentials.")
-        st.caption("Version 1.5.2 - Password: OQ123 (case sensitive)")
+        st.caption("Version 1.5.3 - DD/MM/YYYY date format enforced")
         return False
     
     # Password correct
@@ -353,64 +353,103 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
 uploaded = st.file_uploader("Upload CSV (must include both date columns and source column)", type=["csv"])
 
 def parse_dd_mm_yyyy_date(date_str, debug=False):
-    """Force DD/MM/YYYY parsing - NO AMERICAN FORMAT"""
+    """Force DD/MM/YYYY parsing - NO AMERICAN FORMAT
+    
+    This parser EXPLICITLY handles DD/MM/YYYY format.
+    Examples:
+    - "30/8/2025" → August 30, 2025 ✓
+    - "31/12/2024" → December 31, 2024 ✓
+    - "1/1/1970" → NULL (placeholder) ✓
+    """
     try:
-        # Remove any extra whitespace
+        # Convert to string and clean
         date_str = str(date_str).strip()
         
-        # Handle NaN/None/empty values AND the string 'NaT'
-        if date_str in ['nan', 'NaN', 'None', '', 'NaT', 'nat', 'NAT', '<NA>', 'null', 'NULL']:
+        # Handle various null representations
+        null_values = ['nan', 'NaN', 'None', '', 'NaT', 'nat', 'NAT', '<NA>', 
+                      'null', 'NULL', 'N/A', 'n/a', '#N/A', '#VALUE!']
+        if date_str in null_values:
             if debug:
-                print(f"  Null/NaT value detected: '{date_str}'")
+                print(f"  Null value detected: '{date_str}'")
             return pd.NaT
             
-        # Handle 1/1/1970 placeholder dates (means "no FTD yet")
-        if date_str == '1/1/1970' or date_str == '01/01/1970' or date_str == '1/01/1970':
+        # Handle 1/1/1970 and similar placeholder dates
+        placeholder_dates = ['1/1/1970', '01/01/1970', '1/01/1970', '01/1/1970',
+                           '1-1-1970', '01-01-1970', '1970-01-01', '1970-1-1']
+        if date_str in placeholder_dates:
             if debug:
-                print(f"  Skipping placeholder date (no FTD): {date_str}")
+                print(f"  Placeholder date (no FTD): {date_str}")
             return pd.NaT
             
-        # Remove time component if present
-        if ' ' in date_str:
-            date_str = date_str.split(' ')[0]
+        # Remove time component if present (handle various formats)
+        for time_sep in [' ', 'T']:
+            if time_sep in date_str:
+                date_str = date_str.split(time_sep)[0]
+                break
         
-        # Split by / or -
-        if '/' in date_str:
-            parts = date_str.split('/')
-        elif '-' in date_str:
-            parts = date_str.split('-')
-        else:
+        # Try multiple separators
+        parts = None
+        for separator in ['/', '-', '.']:
+            if separator in date_str:
+                parts = date_str.split(separator)
+                break
+        
+        if not parts:
             if debug:
-                print(f"  No separator found in: {date_str}")
+                print(f"  No valid separator found in: {date_str}")
             return pd.NaT
             
-        if len(parts) >= 3:
-            day = int(parts[0])    # FIRST part is DAY
-            month = int(parts[1])  # SECOND part is MONTH  
-            year = int(parts[2])   # THIRD part is YEAR
+        if len(parts) != 3:
+            if debug:
+                print(f"  Invalid format (need 3 parts): {date_str}")
+            return pd.NaT
             
-            # Handle 2-digit years
-            if year < 100:
-                if year < 30:  # 00-29 -> 2000-2029
-                    year = 2000 + year
-                else:  # 30-99 -> 1930-1999 (but these will be filtered out)
-                    year = 1900 + year
+        # CRITICAL: Parse as DD/MM/YYYY (European format)
+        day_str, month_str, year_str = parts[0], parts[1], parts[2]
+        
+        # Convert to integers
+        day = int(day_str)
+        month = int(month_str)
+        year = int(year_str)
+        
+        # Handle 2-digit years
+        if year < 100:
+            if year < 30:  # 00-29 → 2000-2029
+                year = 2000 + year
+            else:  # 30-99 → 1930-1999
+                year = 1900 + year
+        
+        # Validate ranges
+        if not (1 <= day <= 31):
+            if debug:
+                print(f"  Invalid day {day} in: {date_str}")
+            return pd.NaT
             
-            # Basic validation
-            if 1 <= day <= 31 and 1 <= month <= 12:
-                # Don't filter by year here, let the main function handle it
-                result = pd.Timestamp(year, month, day)
-                if debug and year < 2020:
-                    print(f"  Parsed but will filter: {date_str} -> {result}")
-                return result
-            else:
-                if debug:
-                    print(f"  Invalid day/month: day={day}, month={month} from {date_str}")
-    except Exception as e:
+        if not (1 <= month <= 12):
+            if debug:
+                print(f"  Invalid month {month} in: {date_str}")
+            return pd.NaT
+            
+        # Create timestamp with explicit DD/MM/YYYY interpretation
+        try:
+            result = pd.Timestamp(year=year, month=month, day=day)
+            if debug:
+                print(f"  Successfully parsed: '{date_str}' → {result.strftime('%d/%m/%Y')}")
+            return result
+        except ValueError as ve:
+            # Invalid date (like Feb 30)
+            if debug:
+                print(f"  Invalid date combination: {date_str} - {ve}")
+            return pd.NaT
+            
+    except (ValueError, TypeError) as e:
         if debug:
             print(f"  Error parsing '{date_str}': {e}")
-        pass
-    return pd.NaT
+        return pd.NaT
+    except Exception as e:
+        if debug:
+            print(f"  Unexpected error parsing '{date_str}': {e}")
+        return pd.NaT
 
 @st.cache_data(show_spinner=False)
 def load_df(file):
@@ -600,6 +639,7 @@ def load_df(file):
     df.attrs['ftd_future'] = ftd_future
     df.attrs['kyc_future'] = kyc_future
     df.attrs['final_count'] = len(df)
+    df.attrs['placeholder_count'] = placeholder_count if 'placeholder_count' in locals() else 0
     
     # Store the actual column names found for later use
     df.attrs['ftd_date_col'] = ftd_date_col
@@ -712,9 +752,12 @@ with st.expander("📊 Data Quality Report", expanded=False):
             details.append(f"{future} too far in future")
             
         if details:
-            st.warning(f"⚠️ **{df.attrs.get(invalid_dates_key, 0)} records have invalid dates** in '{active_date_col}' column, including {' and '.join(details)}.")
+            st.warning(f"⚠️ **{df.attrs.get(invalid_dates_key, 0)} records have invalid/placeholder dates** in '{active_date_col}' column:")
+            st.caption(f"Including: {' • '.join(details)}")
+            st.caption("Note: '1/1/1970' dates are treated as 'No FTD Yet' placeholders")
         else:
-            st.warning(f"⚠️ **{df.attrs.get(invalid_dates_key, 0)} records have invalid dates** in '{active_date_col}' column. These dates could not be parsed.")
+            st.warning(f"⚠️ **{df.attrs.get(invalid_dates_key, 0)} records have dates that couldn't be parsed** in '{active_date_col}' column.")
+            st.caption("Expected format: DD/MM/YYYY (e.g., 30/8/2025 for August 30, 2025)")
     
     st.markdown("#### Data Quality Metrics")
     col1, col2, col3 = st.columns(3)
