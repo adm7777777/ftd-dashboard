@@ -1065,6 +1065,18 @@ with st.sidebar:
     
     st.markdown("---")
     st.subheader("Display Options")
+    
+    # Add view mode toggle for comparison dashboard
+    if dashboard_type == "KYC & FTD Comparison":
+        comparison_view = st.radio(
+            "View Mode",
+            ["Absolute Numbers", "Conversion Rate %"],
+            horizontal=True,
+            help="Switch between absolute client counts and conversion rate percentages"
+        )
+    else:
+        comparison_view = "Absolute Numbers"  # Default for other dashboards
+    
     show_total = st.checkbox("Show Total (All Sources)", value=True, help="Display a line showing the total across all selected sources")
     
     # Source grouping option
@@ -1185,21 +1197,30 @@ if dashboard_type == "KYC & FTD Comparison":
     else:
         comparison_data = pd.DataFrame(columns=["month", "source_category", "ftd_clients", "kyc_clients", "conversion_rate"])
     
-    # Prepare for charting - reshape to long format for multi-line chart
-    ftd_chart = comparison_data[['month', 'source_category', 'ftd_clients']].copy()
-    ftd_chart['metric'] = 'FTD'
-    ftd_chart.rename(columns={'ftd_clients': 'clients'}, inplace=True)
+    # Prepare for charting based on view mode
+    if comparison_view == "Conversion Rate %":
+        # Create conversion rate data for each category
+        conv_chart = comparison_data[['month', 'source_category', 'conversion_rate']].copy()
+        conv_chart.rename(columns={'conversion_rate': 'clients', 'month': 'ftd_month', 'source_category': source_col}, inplace=True)
+        counts = conv_chart
+        display_sources = sorted(counts[source_col].unique())
+    else:
+        # Original absolute numbers view - reshape to long format for multi-line chart
+        ftd_chart = comparison_data[['month', 'source_category', 'ftd_clients']].copy()
+        ftd_chart['metric'] = 'FTD'
+        ftd_chart.rename(columns={'ftd_clients': 'clients'}, inplace=True)
+        
+        kyc_chart = comparison_data[['month', 'source_category', 'kyc_clients']].copy()
+        kyc_chart['metric'] = 'KYC'
+        kyc_chart.rename(columns={'kyc_clients': 'clients'}, inplace=True)
+        
+        counts = pd.concat([ftd_chart, kyc_chart], ignore_index=True)
+        counts['source_metric'] = counts['source_category'] + ' - ' + counts['metric']
+        counts.rename(columns={'month': 'ftd_month', 'source_metric': source_col}, inplace=True)
+        
+        # Set display sources for the chart
+        display_sources = sorted(counts[source_col].unique())
     
-    kyc_chart = comparison_data[['month', 'source_category', 'kyc_clients']].copy()
-    kyc_chart['metric'] = 'KYC'
-    kyc_chart.rename(columns={'kyc_clients': 'clients'}, inplace=True)
-    
-    counts = pd.concat([ftd_chart, kyc_chart], ignore_index=True)
-    counts['source_metric'] = counts['source_category'] + ' - ' + counts['metric']
-    counts.rename(columns={'month': 'ftd_month', 'source_metric': source_col}, inplace=True)
-    
-    # Set display sources for the chart
-    display_sources = sorted(counts[source_col].unique())
     group_sources = False  # Don't use regular grouping logic
     
 elif len(dff) == 0:
@@ -1405,14 +1426,23 @@ if st.checkbox("Show debug info", value=False, key="debug_info"):
 # Add total line if requested (not for comparison dashboard)
 if dashboard_type == "KYC & FTD Comparison":
     # Custom color scale for comparison dashboard
-    color_mapping = {
-        '🏦 IB Sources - KYC': '#4CAF50',      # Green for IB KYC
-        '🏦 IB Sources - FTD': '#2E7D32',      # Darker green for IB FTD
-        '🌱 Organic - KYC': '#2196F3',         # Blue for Organic KYC
-        '🌱 Organic - FTD': '#1565C0',         # Darker blue for Organic FTD
-        '📢 Marketing - KYC': '#FF9800',       # Orange for Marketing KYC
-        '📢 Marketing - FTD': '#E65100'        # Darker orange for Marketing FTD
-    }
+    if comparison_view == "Conversion Rate %":
+        # Simple colors for conversion rate view (one line per category)
+        color_mapping = {
+            '🏦 IB Sources': '#4CAF50',      # Green for IB
+            '🌱 Organic': '#2196F3',         # Blue for Organic
+            '📢 Marketing': '#FF9800'        # Orange for Marketing
+        }
+    else:
+        # Dual colors for absolute numbers (KYC and FTD)
+        color_mapping = {
+            '🏦 IB Sources - KYC': '#4CAF50',      # Green for IB KYC
+            '🏦 IB Sources - FTD': '#2E7D32',      # Darker green for IB FTD
+            '🌱 Organic - KYC': '#2196F3',         # Blue for Organic KYC
+            '🌱 Organic - FTD': '#1565C0',         # Darker blue for Organic FTD
+            '📢 Marketing - KYC': '#FF9800',       # Orange for Marketing KYC
+            '📢 Marketing - FTD': '#E65100'        # Darker orange for Marketing FTD
+        }
     domain = display_sources
     range_colors = [color_mapping.get(s, '#808080') for s in domain]
     color_scale = alt.Scale(domain=domain, range=range_colors)
@@ -1468,7 +1498,7 @@ chart_base = alt.Chart(chart_data).encode(
             axis=alt.Axis(title="Month", format="%b %Y"),
             scale=alt.Scale(padding=20)),
     y=alt.Y("clients:Q", 
-            axis=alt.Axis(title="Clients"), 
+            axis=alt.Axis(title="Conversion Rate (%)" if dashboard_type == "KYC & FTD Comparison" and comparison_view == "Conversion Rate %" else "Clients"), 
             stack=None if chart_type == "Line" else "zero"),
     color=alt.Color(f"{source_col}:N", 
                    legend=alt.Legend(title="Source"),
@@ -1476,7 +1506,9 @@ chart_base = alt.Chart(chart_data).encode(
     tooltip=[
         alt.Tooltip("ftd_month:T", title="Month", format="%B %Y"),
         alt.Tooltip(f"{source_col}:N", title="Source"),
-        alt.Tooltip("clients:Q", title="Clients", format=",.0f")
+        alt.Tooltip("clients:Q", 
+                   title="Conversion Rate" if dashboard_type == "KYC & FTD Comparison" and comparison_view == "Conversion Rate %" else "Clients", 
+                   format=".1f" if dashboard_type == "KYC & FTD Comparison" and comparison_view == "Conversion Rate %" else ",.0f")
     ]
 )
 
@@ -1535,7 +1567,10 @@ else:
     )
 
 if dashboard_type == "KYC & FTD Comparison":
-    st.markdown("### KYC vs FTD Comparison by Source Type")
+    if comparison_view == "Conversion Rate %":
+        st.markdown("### Conversion Rate by Source Type (FTD/KYC %)")
+    else:
+        st.markdown("### KYC vs FTD Comparison by Source Type")
 else:
     st.markdown("### Monthly acquisition by source")
 if not chart_data.empty:
