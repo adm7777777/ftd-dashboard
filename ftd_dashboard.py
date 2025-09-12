@@ -1,5 +1,5 @@
 
-# Version 1.5.4 - Smart parser handles BOTH YYYY-MM-DD and DD/MM/YYYY formats
+# Version 1.5.5 - Fixed 1970-01-01 placeholder detection for YYYY-MM-DD format
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -41,7 +41,7 @@ def check_password():
             key="password"
         )
         st.info("💡 Contact your administrator for access credentials.")
-        st.caption("Version 1.5.4")
+        st.caption("Version 1.5.5")
         return False
     
     # Password not correct
@@ -55,7 +55,7 @@ def check_password():
         )
         st.error("❌ Incorrect password. Please try again.")
         st.info("💡 Contact your administrator for access credentials.")
-        st.caption("Version 1.5.4")
+        st.caption("Version 1.5.5")
         return False
     
     # Password correct
@@ -376,12 +376,13 @@ def parse_dd_mm_yyyy_date(date_str, debug=False):
             return pd.NaT
             
         # Handle 1/1/1970 and similar placeholder dates
-        placeholder_dates = ['1/1/1970', '01/01/1970', '1/01/1970', '01/1/1970',
-                           '1-1-1970', '01-01-1970', '1970-01-01', '1970-1-1']
-        if date_str in placeholder_dates or date_str.startswith('1970-01-01'):
-            if debug:
-                print(f"  Placeholder date (no FTD): {date_str}")
-            return pd.NaT
+        # Check for 1970 dates in any format
+        if '1970' in date_str:
+            # Check if this is a 1970-01-01 date (placeholder for "no FTD")
+            if any(x in date_str for x in ['1970-01-01', '1970-1-1', '01/01/1970', '1/1/1970', '01-01-1970', '1-1-1970']):
+                if debug:
+                    print(f"  Placeholder date (no FTD): {date_str}")
+                return pd.NaT
         
         # CRITICAL: Check format based on separators
         # If it contains '-' and looks like YYYY-MM-DD, parse it as such
@@ -514,10 +515,12 @@ def load_df(file):
     # Add summary of placeholder dates
     placeholder_count = 0
     if ftd_col in df.columns:
-        placeholder_count = df[ftd_col].isin(['1/1/1970', '01/01/1970', '1/01/1970']).sum()
+        # Check for both formats of placeholder dates
+        placeholder_values = ['1/1/1970', '01/01/1970', '1/01/1970', '1970-01-01', '1970-1-1']
+        placeholder_count = df[ftd_col].isin(placeholder_values).sum()
         debug_info.append(f"\n📊 FTD DATA SUMMARY:")
         debug_info.append(f"  Total records: {len(df)}")
-        debug_info.append(f"  Placeholder dates (1/1/1970): {placeholder_count}")
+        debug_info.append(f"  Placeholder dates (1970-01-01): {placeholder_count}")
         debug_info.append(f"  Potential FTD records: {len(df) - placeholder_count}")
     
     # Store debug info for display
