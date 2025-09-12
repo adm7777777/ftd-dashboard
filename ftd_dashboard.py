@@ -1,5 +1,5 @@
 
-# Version 1.5.3 - Enhanced DD/MM/YYYY parser with better error handling
+# Version 1.5.4 - Smart parser handles BOTH YYYY-MM-DD and DD/MM/YYYY formats
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -41,7 +41,7 @@ def check_password():
             key="password"
         )
         st.info("💡 Contact your administrator for access credentials.")
-        st.caption("Version 1.5.3")
+        st.caption("Version 1.5.4")
         return False
     
     # Password not correct
@@ -55,7 +55,7 @@ def check_password():
         )
         st.error("❌ Incorrect password. Please try again.")
         st.info("💡 Contact your administrator for access credentials.")
-        st.caption("Version 1.5.3")
+        st.caption("Version 1.5.4")
         return False
     
     # Password correct
@@ -353,17 +353,19 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
 uploaded = st.file_uploader("Upload CSV (must include both date columns and source column)", type=["csv"])
 
 def parse_dd_mm_yyyy_date(date_str, debug=False):
-    """Force DD/MM/YYYY parsing - NO AMERICAN FORMAT
+    """Smart date parser that handles BOTH formats:
+    - YYYY-MM-DD (raw CSV format from databases/exports)
+    - DD/MM/YYYY (manual entry or Excel re-saved)
     
-    This parser EXPLICITLY handles DD/MM/YYYY format.
     Examples:
-    - "30/8/2025" → August 30, 2025 ✓
-    - "31/12/2024" → December 31, 2024 ✓
+    - "2024-08-19 14:39:00" → August 19, 2024 ✓
+    - "2024-08-19" → August 19, 2024 ✓
+    - "19/8/2024" → August 19, 2024 ✓
     - "1/1/1970" → NULL (placeholder) ✓
     """
     try:
         # Convert to string and clean
-        date_str = str(date_str).strip()
+        date_str = str(date_str).strip().strip('"')  # Remove quotes from CSV
         
         # Handle various null representations
         null_values = ['nan', 'NaN', 'None', '', 'NaT', 'nat', 'NAT', '<NA>', 
@@ -376,78 +378,97 @@ def parse_dd_mm_yyyy_date(date_str, debug=False):
         # Handle 1/1/1970 and similar placeholder dates
         placeholder_dates = ['1/1/1970', '01/01/1970', '1/01/1970', '01/1/1970',
                            '1-1-1970', '01-01-1970', '1970-01-01', '1970-1-1']
-        if date_str in placeholder_dates:
+        if date_str in placeholder_dates or date_str.startswith('1970-01-01'):
             if debug:
                 print(f"  Placeholder date (no FTD): {date_str}")
             return pd.NaT
-            
-        # Remove time component if present (handle various formats)
-        # Handle formats like "19/8/2024 14:39" or "19/8/2024 2:39:45 PM"
-        if ' ' in date_str:
-            # Take only the date part (before the space)
-            date_str = date_str.split(' ')[0]
-            if debug:
-                print(f"  Removed time component, now: {date_str}")
         
-        # Try multiple separators
-        parts = None
-        for separator in ['/', '-', '.']:
-            if separator in date_str:
-                parts = date_str.split(separator)
-                break
+        # CRITICAL: Check format based on separators
+        # If it contains '-' and looks like YYYY-MM-DD, parse it as such
+        if '-' in date_str and len(date_str.split('-')[0]) == 4:
+            # This is YYYY-MM-DD format (raw CSV from database)
+            if debug:
+                print(f"  Detected YYYY-MM-DD format: {date_str}")
+            try:
+                # pd.to_datetime handles YYYY-MM-DD perfectly, including time
+                result = pd.to_datetime(date_str)
+                if debug:
+                    print(f"  Successfully parsed: '{date_str}' → {result}")
+                return result
+            except:
+                if debug:
+                    print(f"  Failed to parse YYYY-MM-DD: {date_str}")
+                return pd.NaT
+                
+        # If it contains '/', assume DD/MM/YYYY (manual entry or Excel re-saved)
+        elif '/' in date_str:
+            if debug:
+                print(f"  Detected DD/MM/YYYY format: {date_str}")
+            
+            # Remove time component if present
+            if ' ' in date_str:
+                date_str = date_str.split(' ')[0]
+                if debug:
+                    print(f"  Removed time component, now: {date_str}")
+            
+            parts = date_str.split('/')
+            if len(parts) != 3:
+                if debug:
+                    print(f"  Invalid format (need 3 parts): {date_str}")
+                return pd.NaT
+                
+            # Parse as DD/MM/YYYY
+            day_str, month_str, year_str = parts[0], parts[1], parts[2]
+            
+            try:
+                day = int(day_str)
+                month = int(month_str)
+                year = int(year_str)
+                
+                # Handle 2-digit years
+                if year < 100:
+                    if year < 30:  # 00-29 → 2000-2029
+                        year = 2000 + year
+                    else:  # 30-99 → 1930-1999
+                        year = 1900 + year
+                
+                # Validate ranges
+                if not (1 <= day <= 31) or not (1 <= month <= 12):
+                    if debug:
+                        print(f"  Invalid day/month: day={day}, month={month}")
+                    return pd.NaT
+                
+                # Create timestamp
+                result = pd.Timestamp(year=year, month=month, day=day)
+                if debug:
+                    print(f"  Successfully parsed: '{date_str}' → {result}")
+                return result
+            except (ValueError, TypeError) as e:
+                if debug:
+                    print(f"  Error parsing DD/MM/YYYY: {e}")
+                return pd.NaT
         
-        if not parts:
-            if debug:
-                print(f"  No valid separator found in: {date_str}")
-            return pd.NaT
-            
-        if len(parts) != 3:
-            if debug:
-                print(f"  Invalid format (need 3 parts): {date_str}")
-            return pd.NaT
-            
-        # CRITICAL: Parse as DD/MM/YYYY (European format)
-        day_str, month_str, year_str = parts[0], parts[1], parts[2]
+        # Try other formats with dots
+        elif '.' in date_str:
+            # Handle DD.MM.YYYY format
+            parts = date_str.split('.')
+            if len(parts) == 3:
+                try:
+                    day = int(parts[0])
+                    month = int(parts[1])
+                    year = int(parts[2])
+                    result = pd.Timestamp(year=year, month=month, day=day)
+                    if debug:
+                        print(f"  Successfully parsed DD.MM.YYYY: '{date_str}' → {result}")
+                    return result
+                except:
+                    pass
         
-        # Convert to integers
-        day = int(day_str)
-        month = int(month_str)
-        year = int(year_str)
-        
-        # Handle 2-digit years
-        if year < 100:
-            if year < 30:  # 00-29 → 2000-2029
-                year = 2000 + year
-            else:  # 30-99 → 1930-1999
-                year = 1900 + year
-        
-        # Validate ranges
-        if not (1 <= day <= 31):
-            if debug:
-                print(f"  Invalid day {day} in: {date_str}")
-            return pd.NaT
-            
-        if not (1 <= month <= 12):
-            if debug:
-                print(f"  Invalid month {month} in: {date_str}")
-            return pd.NaT
-            
-        # Create timestamp with explicit DD/MM/YYYY interpretation
-        try:
-            result = pd.Timestamp(year=year, month=month, day=day)
-            if debug:
-                print(f"  Successfully parsed: '{date_str}' → {result.strftime('%d/%m/%Y')}")
-            return result
-        except ValueError as ve:
-            # Invalid date (like Feb 30)
-            if debug:
-                print(f"  Invalid date combination: {date_str} - {ve}")
-            return pd.NaT
-            
-    except (ValueError, TypeError) as e:
+        # If no recognizable format, return NaT
         if debug:
-            print(f"  Error parsing '{date_str}': {e}")
+            print(f"  Unrecognized date format: {date_str}")
         return pd.NaT
+            
     except Exception as e:
         if debug:
             print(f"  Unexpected error parsing '{date_str}': {e}")
