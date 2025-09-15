@@ -1043,6 +1043,74 @@ with st.sidebar:
     selected_sources = st.session_state.selected_sources
     
     st.markdown("---")
+    
+    # Country selection - only show if country data exists
+    country_col = df.attrs.get('country_col')
+    has_country = df.attrs.get('has_country', False)
+    
+    if has_country and country_col and dashboard_type != "KYC & FTD Comparison":
+        st.subheader("🌍 Country Filter")
+        
+        # Get country totals for display
+        country_totals = df.groupby(country_col, dropna=False)["Record ID"].size().sort_values(ascending=False)
+        all_countries = country_totals.index.tolist()
+        
+        # Search box for countries
+        country_search_term = st.text_input("🔍 Search countries", placeholder="Type to filter countries...", key="country_search")
+        
+        # Quick actions for countries
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("Select All", use_container_width=True, key="country_select_all"):
+                st.session_state.selected_countries = all_countries.copy()
+        with col2:
+            if st.button("Clear All", use_container_width=True, key="country_clear_all"):
+                st.session_state.selected_countries = []
+        with col3:
+            top_n_countries = st.number_input("Top N", min_value=1, max_value=max(1, len(all_countries)), value=min(10, len(all_countries)), label_visibility="collapsed", key="country_top_n")
+            if st.button(f"Top {top_n_countries}", use_container_width=True, key="country_top_n_btn"):
+                st.session_state.selected_countries = all_countries[:top_n_countries]
+        
+        # Initialize session state if not exists - default to ALL countries selected
+        if "selected_countries" not in st.session_state:
+            st.session_state.selected_countries = all_countries.copy()
+        
+        # Filter countries based on search
+        filtered_countries = [c for c in all_countries if country_search_term.lower() in c.lower()]
+        
+        # Display count
+        st.caption(f"Showing {len(filtered_countries)} of {len(all_countries)} countries | {len(st.session_state.selected_countries)} selected")
+        
+        # Scrollable container with checkboxes for countries
+        st.markdown("---")
+        country_container = st.container(height=300)
+        
+        with country_container:
+            for country in filtered_countries:
+                count = country_totals[country]
+                is_selected = country in st.session_state.selected_countries
+                
+                # Create checkbox with country name and count
+                new_state = st.checkbox(
+                    f"{country} ({count:,} clients)",
+                    value=is_selected,
+                    key=f"country_checkbox_{country}"
+                )
+                
+                # Update session state based on checkbox
+                if new_state and country not in st.session_state.selected_countries:
+                    st.session_state.selected_countries.append(country)
+                elif not new_state and country in st.session_state.selected_countries:
+                    st.session_state.selected_countries.remove(country)
+    else:
+        # Initialize empty country selection when no country data
+        if "selected_countries" not in st.session_state:
+            st.session_state.selected_countries = []
+    
+    # Get selected countries (will be empty list if no country data)
+    selected_countries = st.session_state.get('selected_countries', [])
+    
+    st.markdown("---")
     st.subheader("Date Range")
     
     # Get all available months based on dashboard type
