@@ -535,11 +535,13 @@ def load_df(file):
     ftd_date_col = "portal - ftd_time"
     kyc_date_col = "DATE_CREATED"
     source_col = "portal - source_marketing_campaign"
+    country_col = "portal - country"  # Optional column
     
     # Alternative names to check
     ftd_alternatives = ["portal - ftd_time", "Portal - ftd_time", "portal-ftd_time", "ftd_time"]
     kyc_alternatives = ["DATE_CREATED", "date_created", "Date_Created", "Create Date"]
     source_alternatives = ["portal - source_marketing_campaign", "Marketing campaign", "portal - sour", "source"]
+    country_alternatives = ["portal - country", "Portal - country", "portal-country", "country", "Country"]
     
     # Check for case-insensitive column matching
     def find_column_case_insensitive(df, col_name):
@@ -553,6 +555,13 @@ def load_df(file):
     actual_ftd_col = find_column_case_insensitive(df, ftd_date_col)
     actual_kyc_col = find_column_case_insensitive(df, kyc_date_col)
     actual_source_col = find_column_case_insensitive(df, source_col)
+    
+    # Try to find country column (optional)
+    actual_country_col = None
+    for country_name in country_alternatives:
+        actual_country_col = find_column_case_insensitive(df, country_name)
+        if actual_country_col:
+            break
     
     # Check all required columns exist
     missing_cols = []
@@ -672,6 +681,10 @@ def load_df(file):
     # Fill missing sources
     df[source_col] = df[source_col].fillna("(Unknown)").astype(str).str.strip()
     
+    # Fill missing countries (only if country column exists)
+    if actual_country_col:
+        df[actual_country_col] = df[actual_country_col].fillna("(Unknown)").astype(str).str.strip()
+    
     # Create month columns for both dashboards
     df["ftd_month"] = df[ftd_date_col].dt.to_period("M").dt.to_timestamp()
     df["kyc_month"] = df[kyc_date_col].dt.to_period("M").dt.to_timestamp()
@@ -691,6 +704,8 @@ def load_df(file):
     df.attrs['ftd_date_col'] = ftd_date_col
     df.attrs['kyc_date_col'] = kyc_date_col
     df.attrs['source_col'] = source_col
+    df.attrs['country_col'] = actual_country_col  # Will be None if not found
+    df.attrs['has_country'] = actual_country_col is not None
     
     return df
 
