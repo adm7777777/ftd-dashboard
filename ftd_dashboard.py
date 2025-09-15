@@ -1316,11 +1316,14 @@ with st.sidebar:
     # Initialize source_col_for_chart (will be updated based on analysis dimension)
     source_col_for_chart = source_col
     
-    # Initialize comparison_view (will be updated in Display Options section)
+    # Initialize display options variables (will be updated in Display Options section)
     if dashboard_type == "KYC & FTD Comparison":
         comparison_view = "Conversion Rate %"  # Default value
     else:
         comparison_view = "Absolute Numbers"
+    
+    show_total = True  # Default value
+    group_sources = False  # Default value
     if selected_months:
         start = min(selected_months)
         end = max(selected_months)
@@ -1909,11 +1912,11 @@ with col1:
         )
 
 with col2:
-    show_total = st.checkbox("Show Total (All Sources)", value=True, help="Display a line showing the total across all selected sources")
+    show_total = st.checkbox("Show Total (All Sources)", value=show_total, help="Display a line showing the total across all selected sources")
 
 with col3:
     # Source grouping option
-    group_sources = st.checkbox("Group Sources by Type", value=False, 
+    group_sources = st.checkbox("Group Sources by Type", value=group_sources, 
                                 help="Group sources into IB, Organic (Unknown), and Marketing categories")
 
 if group_sources:
