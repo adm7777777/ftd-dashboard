@@ -1895,10 +1895,20 @@ else:
 # Display Options (moved from sidebar for better visibility)
 st.subheader("📊 Display Options")
 
-col1, col2, col3 = st.columns([2, 2, 2])
+# Compact horizontal layout
+col1, col2 = st.columns([3, 2])
 
 with col1:
-    # Add view mode toggle for comparison dashboard
+    # Checkboxes in horizontal layout
+    checkbox_col1, checkbox_col2 = st.columns(2)
+    with checkbox_col1:
+        show_total = st.checkbox("Show Total (All Sources)", value=show_total, help="Display a line showing the total across all selected sources")
+    with checkbox_col2:
+        group_sources = st.checkbox("Group Sources by Type", value=group_sources, 
+                                    help="Group sources into IB, Organic (Unknown), and Marketing categories")
+
+with col2:
+    # Add view mode toggle for comparison dashboard (right side)
     if dashboard_type == "KYC & FTD Comparison":
         comparison_view = st.radio(
             "View Mode",
@@ -1908,16 +1918,8 @@ with col1:
             help="Switch between conversion rate percentages and absolute client counts"
         )
 
-with col2:
-    show_total = st.checkbox("Show Total (All Sources)", value=show_total, help="Display a line showing the total across all selected sources")
-
-with col3:
-    # Source grouping option
-    group_sources = st.checkbox("Group Sources by Type", value=group_sources, 
-                                help="Group sources into IB, Organic (Unknown), and Marketing categories")
-
 if group_sources:
-    st.caption("📊 **Grouping Logic:** IB (sources with 'IB') • Organic (Unknown) • Marketing (all others)")
+    st.caption("📊 **Grouping:** IB (sources with 'IB') • Organic (Unknown) • Marketing (all others)")
 
 st.markdown("---")
 
