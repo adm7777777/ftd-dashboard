@@ -153,30 +153,67 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Dashboard selector
+# Check if country data is available for country dashboards
+has_country_data = False
+if 'df' in locals() and hasattr(df, 'attrs'):
+    has_country_data = df.attrs.get('has_country', False)
+
+# Dashboard selector - show country options only if country data is available
+if has_country_data:
+    dashboard_options = [
+        "FTD by Source", 
+        "FTD by Country", 
+        "KYC by Source", 
+        "KYC by Country", 
+        "KYC & FTD Comparison"
+    ]
+    dashboard_help = "Choose your analysis view: by Source (campaigns/IBs) or by Country (geographic)"
+else:
+    dashboard_options = [
+        "FTD Dashboard", 
+        "KYC Dashboard", 
+        "KYC & FTD Comparison"
+    ]
+    dashboard_help = "FTD: First Time Deposits | KYC: Know Your Customer | Comparison: Both metrics"
+
 dashboard_type = st.radio(
     "Select Dashboard",
-    ["FTD Dashboard", "KYC Dashboard", "KYC & FTD Comparison"],
+    dashboard_options,
     horizontal=True,
-    help="FTD: First Time Deposits | KYC: Know Your Customer | Comparison: Both metrics grouped by source type"
+    help=dashboard_help
 )
 
 # Dynamic title and caption based on selection
-if dashboard_type == "FTD Dashboard":
-    st.title("FTD Acquisition Dashboard")
+if dashboard_type in ["FTD Dashboard", "FTD by Source"]:
+    st.title("FTD Acquisition by Source")
     st.caption("Monthly client acquisition by source (campaign / IB), anchored on **portal - ftd_time**. Dates parsed as **DD/MM/YYYY**.")
     date_column = "portal - ftd_time"
     metric_name = "FTD Clients"
-elif dashboard_type == "KYC Dashboard":
-    st.title("KYC Clients Dashboard")
+    analysis_dimension = "source"
+elif dashboard_type == "FTD by Country":
+    st.title("FTD Acquisition by Country")
+    st.caption("Monthly client acquisition by country, anchored on **portal - ftd_time**. Dates parsed as **DD/MM/YYYY**.")
+    date_column = "portal - ftd_time"
+    metric_name = "FTD Clients"
+    analysis_dimension = "country"
+elif dashboard_type in ["KYC Dashboard", "KYC by Source"]:
+    st.title("KYC Clients by Source")
     st.caption("Monthly KYC'd clients by source (campaign / IB), anchored on **DATE_CREATED**. Dates parsed as **DD/MM/YYYY** (time component ignored).")
     date_column = "DATE_CREATED"
     metric_name = "KYC'd Clients"
+    analysis_dimension = "source"
+elif dashboard_type == "KYC by Country":
+    st.title("KYC Clients by Country")
+    st.caption("Monthly KYC'd clients by country, anchored on **DATE_CREATED**. Dates parsed as **DD/MM/YYYY** (time component ignored).")
+    date_column = "DATE_CREATED"
+    metric_name = "KYC'd Clients"
+    analysis_dimension = "country"
 else:  # KYC & FTD Comparison
     st.title("KYC & FTD Comparison Dashboard")
     st.caption("Compare KYC and FTD conversions by source type (IB Sources, Organic, Marketing). Shows conversion rates and trends.")
     date_column = None  # Will use both columns
     metric_name = "Conversions"
+    analysis_dimension = "source"
 
 # Initialize tour state
 if "tour_step" not in st.session_state:
@@ -1001,8 +1038,8 @@ with st.sidebar:
     totals = df.groupby(source_col, dropna=False)["Record ID"].size().sort_values(ascending=False)
     all_sources = totals.index.tolist()
     
-    # Only show source selection for individual dashboards, not comparison
-    if dashboard_type != "KYC & FTD Comparison":
+    # Show appropriate selection based on analysis dimension
+    if dashboard_type != "KYC & FTD Comparison" and analysis_dimension == "source":
         st.subheader("Source Selection")
         
         # Search box
@@ -1052,6 +1089,11 @@ with st.sidebar:
                     st.session_state.selected_sources.append(source)
                 elif not new_state and source in st.session_state.selected_sources:
                     st.session_state.selected_sources.remove(source)
+    elif analysis_dimension == "country":
+        # For country dashboards, select all sources by default but don't show UI
+        if "selected_sources" not in st.session_state:
+            st.session_state.selected_sources = all_sources.copy()
+        st.info("📊 Analyzing by country - all sources included")
     else:
         # For comparison dashboard, select all sources by default
         if "selected_sources" not in st.session_state or dashboard_type == "KYC & FTD Comparison":
@@ -1062,11 +1104,11 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Country selection - only show if country data exists
+    # Country selection - show for country dashboards
     country_col = df.attrs.get('country_col')
     has_country = df.attrs.get('has_country', False)
     
-    if has_country and country_col and dashboard_type != "KYC & FTD Comparison":
+    if has_country and country_col and analysis_dimension == "country":
         st.subheader("🌍 Country Filter")
         
         # Get country totals for display
@@ -1133,7 +1175,7 @@ with st.sidebar:
     
     # Get all available months based on dashboard type
     # Use the same variables defined at the top
-    if dashboard_type == "FTD Dashboard":
+    if dashboard_type in ["FTD Dashboard", "FTD by Source", "FTD by Country"]:
         month_col = "ftd_month"
     else:
         month_col = "kyc_month"
@@ -1292,17 +1334,17 @@ with st.sidebar:
                                               help="Show raw CSV data and detailed parsing information")
 
 # Apply filters
-# Use the correct month column based on dashboard type
-if dashboard_type == "FTD Dashboard":
-    filter_month_col = "ftd_month"
-    filter_date_col = df.attrs.get('ftd_date_col', 'portal - ftd_time')
-elif dashboard_type == "KYC Dashboard":
-    filter_month_col = "kyc_month"
-    filter_date_col = df.attrs.get('kyc_date_col', 'DATE_CREATED')
-else:  # KYC & FTD Comparison
-    # For comparison, we'll need both columns
-    filter_month_col = None  # Will handle differently
-    filter_date_col = None
+    # Use the correct month column based on dashboard type
+    if dashboard_type in ["FTD Dashboard", "FTD by Source", "FTD by Country"]:
+        filter_month_col = "ftd_month"
+        filter_date_col = df.attrs.get('ftd_date_col', 'portal - ftd_time')
+    elif dashboard_type in ["KYC Dashboard", "KYC by Source", "KYC by Country"]:
+        filter_month_col = "kyc_month"
+        filter_date_col = df.attrs.get('kyc_date_col', 'DATE_CREATED')
+    else:  # KYC & FTD Comparison
+        # For comparison, we'll need both columns
+        filter_month_col = None  # Will handle differently
+        filter_date_col = None
 
 # Filter by selected months (not just range)
 if dashboard_type == "KYC & FTD Comparison":
