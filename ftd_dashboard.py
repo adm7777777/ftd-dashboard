@@ -1779,6 +1779,9 @@ elif show_total and (len(display_sources) > 1 or group_sources):
     
     # Combine with original data
     chart_data = pd.concat([counts, monthly_totals], ignore_index=True)
+else:
+    # Ensure chart_data doesn't contain total line when show_total is False
+    chart_data = counts.copy()
     
     # Adjust color scale
     if group_sources:
@@ -1789,14 +1792,14 @@ elif show_total and (len(display_sources) > 1 or group_sources):
             '📢 Marketing': '#FF9800',     # Orange for Marketing
             '📊 TOTAL': '#ff0000'          # Red for Total
         }
-        domain = display_sources + ["📊 TOTAL"]
+        domain = display_sources
         range_colors = [color_mapping.get(s, '#808080') for s in domain]
         color_scale = alt.Scale(domain=domain, range=range_colors)
     else:
-        # Original color scale for individual sources
+        # Original color scale for individual sources only
         color_scale = alt.Scale(
-            domain=display_sources + ["📊 TOTAL"],
-            range=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"][:len(display_sources)] + ["#ff0000"]
+            domain=display_sources,
+            range=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"][:len(display_sources)]
         )
 else:
     if group_sources:
