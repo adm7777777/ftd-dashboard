@@ -1737,17 +1737,9 @@ import altair as alt
 
 alt.data_transformers.disable_max_rows()
 
-# Prepare data for chart
-chart_data = counts.copy()
+# Prepare data for chart (will be set based on display options)
 
-# Debug info
-if st.checkbox("Show debug info", value=False, key="debug_info"):
-    st.write(f"Number of rows in chart_data: {len(chart_data)}")
-    st.write(f"Display sources: {display_sources}")
-    st.write(f"Show total: {show_total}")
-    if not chart_data.empty:
-        st.write("Chart data preview:")
-        st.dataframe(chart_data.head())
+# Debug info (will be moved after chart_data is defined)
 
 # Add total line if requested (not for comparison dashboard)
 if dashboard_type == "KYC & FTD Comparison":
@@ -1782,8 +1774,18 @@ elif show_total and (len(display_sources) > 1 or group_sources):
 else:
     # Ensure chart_data doesn't contain total line when show_total is False
     chart_data = counts.copy()
+
+# Debug info (moved here after chart_data is defined)
+if st.checkbox("Show debug info", value=False, key="debug_info"):
+    st.write(f"Number of rows in chart_data: {len(chart_data)}")
+    st.write(f"Display sources: {display_sources}")
+    st.write(f"Show total: {show_total}")
+    if not chart_data.empty:
+        st.write("Chart data preview:")
+        st.dataframe(chart_data.head())
     
-    # Adjust color scale
+# Adjust color scale
+if 'chart_data' in locals():  # Make sure chart_data exists
     if group_sources:
         # Use specific colors for grouped categories
         color_mapping = {
