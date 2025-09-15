@@ -1301,9 +1301,16 @@ if dashboard_type == "KYC & FTD Comparison":
     # We'll use all sources for comparison (already set above)
     mask_source = pd.Series(True, index=df.index)
     
+    # Add country filtering for comparison dashboard too
+    if df.attrs.get('has_country', False) and selected_countries:
+        country_col = df.attrs.get('country_col')
+        mask_country = df[country_col].isin(selected_countries)
+    else:
+        mask_country = pd.Series(True, index=df.index)  # No country filtering
+    
     # Create two filtered dataframes
-    dff_ftd = df.loc[mask_time_ftd & mask_valid_ftd].copy()
-    dff_kyc = df.loc[mask_time_kyc & mask_valid_kyc].copy()
+    dff_ftd = df.loc[mask_time_ftd & mask_valid_ftd & mask_country].copy()
+    dff_kyc = df.loc[mask_time_kyc & mask_valid_kyc & mask_country].copy()
     dff = None  # Will handle differently
 else:
     # Regular dashboard filtering
@@ -1316,7 +1323,15 @@ else:
     mask_valid_dates = df[filter_date_col].notna()
 
     mask_source = df[source_col].isin(selected_sources) if selected_sources else pd.Series(True, index=df.index)
-    dff = df.loc[mask_time & mask_valid_dates & mask_source].copy()
+    
+    # Add country filtering if country data exists
+    if df.attrs.get('has_country', False) and selected_countries:
+        country_col = df.attrs.get('country_col')
+        mask_country = df[country_col].isin(selected_countries)
+    else:
+        mask_country = pd.Series(True, index=df.index)  # No country filtering
+    
+    dff = df.loc[mask_time & mask_valid_dates & mask_source & mask_country].copy()
 
 # Also get data for ALL sources in the selected months (for active sources calculation)
 if dashboard_type != "KYC & FTD Comparison":
