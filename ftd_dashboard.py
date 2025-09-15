@@ -1301,6 +1301,9 @@ with st.sidebar:
     
     # Use selected months for filtering
     selected_months = st.session_state.selected_months
+    
+    # Initialize source_col_for_chart (will be updated based on analysis dimension)
+    source_col_for_chart = source_col
     if selected_months:
         start = min(selected_months)
         end = max(selected_months)
@@ -1558,6 +1561,9 @@ elif group_sources:
     )
     counts.rename(columns={"source_category": source_col, filter_month_col: "month"}, inplace=True)
     
+    # Update source_col_for_chart for grouped sources
+    source_col_for_chart = source_col
+    
     # Get unique categories from selected sources
     selected_categories = dff['source_category'].unique().tolist()
     
@@ -1585,6 +1591,9 @@ else:
     )
     # Rename month column for consistency
     counts.rename(columns={filter_month_col: "month"}, inplace=True)
+    
+    # Update source_col_for_chart for regular sources
+    source_col_for_chart = source_col
     
     # Use only selected months, not a continuous range
     months = sorted(selected_months) if selected_months else []
@@ -1809,12 +1818,12 @@ chart_base = alt.Chart(chart_data).encode(
     y=alt.Y("clients:Q", 
             axis=alt.Axis(title="Conversion Rate (%)" if dashboard_type == "KYC & FTD Comparison" and comparison_view == "Conversion Rate %" else "Clients"), 
             stack=None if chart_type == "Line" else "zero"),
-    color=alt.Color(f"{source_col}:N", 
-                   legend=alt.Legend(title="Source"),
+    color=alt.Color(f"{source_col_for_chart}:N", 
+                   legend=alt.Legend(title="Country" if analysis_dimension == "country" else "Source"),
                    scale=color_scale),
     tooltip=[
         alt.Tooltip("ftd_month:T", title="Month", format="%B %Y"),
-        alt.Tooltip(f"{source_col}:N", title="Source"),
+        alt.Tooltip(f"{source_col_for_chart}:N", title="Country" if analysis_dimension == "country" else "Source"),
         alt.Tooltip("clients:Q", 
                    title="Conversion Rate" if dashboard_type == "KYC & FTD Comparison" and comparison_view == "Conversion Rate %" else "Clients", 
                    format=".1f" if dashboard_type == "KYC & FTD Comparison" and comparison_view == "Conversion Rate %" else ",.0f")
