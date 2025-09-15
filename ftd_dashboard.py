@@ -1378,12 +1378,9 @@ if dashboard_type == "KYC & FTD Comparison":
     # We'll use all sources for comparison (already set above)
     mask_source = pd.Series(True, index=df.index)
     
-    # Add country filtering for comparison dashboard too
-    if df.attrs.get('has_country', False) and selected_countries:
-        country_col = df.attrs.get('country_col')
-        mask_country = df[country_col].isin(selected_countries)
-    else:
-        mask_country = pd.Series(True, index=df.index)  # No country filtering
+    # For comparison dashboard, don't apply country filtering from sidebar
+    # (The comparison dashboard should show all countries or have its own filter)
+    mask_country = pd.Series(True, index=df.index)  # No country filtering for comparison
     
     # Create two filtered dataframes
     dff_ftd = df.loc[mask_time_ftd & mask_valid_ftd & mask_country].copy()
