@@ -1118,36 +1118,44 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Country selection - show for country dashboards
+    # Country selection - show for country dashboards OR comparison dashboard
     country_col = df.attrs.get('country_col')
     has_country = df.attrs.get('has_country', False)
     
-    if has_country and country_col and analysis_dimension == "country":
-        st.subheader("🌍 Country Filter")
+    if has_country and country_col and (analysis_dimension == "country" or dashboard_type == "KYC & FTD Comparison"):
+        # Use different session state keys for different dashboard types
+        if dashboard_type == "KYC & FTD Comparison":
+            countries_key = "selected_countries_comparison"
+            section_title = "🌍 Country Filter (Comparison)"
+        else:
+            countries_key = "selected_countries"
+            section_title = "🌍 Country Filter"
+            
+        st.subheader(section_title)
         
         # Get country totals for display
         country_totals = df.groupby(country_col, dropna=False)["Record ID"].size().sort_values(ascending=False)
         all_countries = country_totals.index.tolist()
         
         # Search box for countries
-        country_search_term = st.text_input("🔍 Search countries", placeholder="Type to filter countries...", key="country_search")
+        country_search_term = st.text_input("🔍 Search countries", placeholder="Type to filter countries...", key=f"country_search_{dashboard_type}")
         
         # Quick actions for countries
         col1, col2, col3 = st.columns(3)
         with col1:
-            if st.button("Select All", use_container_width=True, key="country_select_all"):
-                st.session_state.selected_countries = all_countries.copy()
+            if st.button("Select All", use_container_width=True, key=f"country_select_all_{dashboard_type}"):
+                st.session_state[countries_key] = all_countries.copy()
         with col2:
-            if st.button("Clear All", use_container_width=True, key="country_clear_all"):
-                st.session_state.selected_countries = []
+            if st.button("Clear All", use_container_width=True, key=f"country_clear_all_{dashboard_type}"):
+                st.session_state[countries_key] = []
         with col3:
-            top_n_countries = st.number_input("Top N", min_value=1, max_value=max(1, len(all_countries)), value=min(10, len(all_countries)), label_visibility="collapsed", key="country_top_n")
-            if st.button(f"Top {top_n_countries}", use_container_width=True, key="country_top_n_btn"):
-                st.session_state.selected_countries = all_countries[:top_n_countries]
+            top_n_countries = st.number_input("Top N", min_value=1, max_value=max(1, len(all_countries)), value=min(10, len(all_countries)), label_visibility="collapsed", key=f"country_top_n_{dashboard_type}")
+            if st.button(f"Top {top_n_countries}", use_container_width=True, key=f"country_top_n_btn_{dashboard_type}"):
+                st.session_state[countries_key] = all_countries[:top_n_countries]
         
         # Initialize session state if not exists - default to ALL countries selected
-        if "selected_countries" not in st.session_state:
-            st.session_state.selected_countries = all_countries.copy()
+        if countries_key not in st.session_state:
+            st.session_state[countries_key] = all_countries.copy()
         
         # Filter countries based on search
         filtered_countries = [c for c in all_countries if country_search_term.lower() in c.lower()]
@@ -1182,7 +1190,10 @@ with st.sidebar:
             st.session_state.selected_countries = []
     
     # Get selected countries (will be empty list if no country data)
-    selected_countries = st.session_state.get('selected_countries', [])
+    if dashboard_type == "KYC & FTD Comparison":
+        selected_countries = st.session_state.get('selected_countries_comparison', [])
+    else:
+        selected_countries = st.session_state.get('selected_countries', [])
     
     st.markdown("---")
     st.subheader("Date Range")
@@ -1378,9 +1389,15 @@ if dashboard_type == "KYC & FTD Comparison":
     # We'll use all sources for comparison (already set above)
     mask_source = pd.Series(True, index=df.index)
     
-    # For comparison dashboard, don't apply country filtering from sidebar
-    # (The comparison dashboard should show all countries or have its own filter)
-    mask_country = pd.Series(True, index=df.index)  # No country filtering for comparison
+    # For comparison dashboard, use its own country selection
+    if df.attrs.get('has_country', False) and selected_countries:
+        country_col = df.attrs.get('country_col')
+        if country_col and country_col in df.columns:
+            mask_country = df[country_col].isin(selected_countries)
+        else:
+            mask_country = pd.Series(True, index=df.index)
+    else:
+        mask_country = pd.Series(True, index=df.index)  # No country filtering if none selected or no country data
     
     # Create two filtered dataframes
     dff_ftd = df.loc[mask_time_ftd & mask_valid_ftd & mask_country].copy()
