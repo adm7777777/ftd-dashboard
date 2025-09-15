@@ -153,12 +153,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Check if country data is available for country dashboards
+# Dashboard selector - show country options if country data is available
+# Check if we already have data loaded (from session state or uploaded file)
 has_country_data = False
-if 'df' in locals() and hasattr(df, 'attrs'):
-    has_country_data = df.attrs.get('has_country', False)
+if 'df' in st.session_state and hasattr(st.session_state.df, 'attrs'):
+    has_country_data = st.session_state.df.attrs.get('has_country', False)
 
-# Dashboard selector - show country options only if country data is available
 if has_country_data:
     dashboard_options = [
         "FTD by Source", 
@@ -766,6 +766,8 @@ def load_df(file):
 if uploaded is not None:
     try:
         df = load_df(uploaded)
+        # Store in session state for dashboard selector
+        st.session_state.df = df
         
         # Only show debug info if there are issues or debug mode is enabled
         show_debug = False
@@ -787,35 +789,40 @@ if uploaded is not None:
         st.error(str(e))
         st.stop()
 else:
-    # Fallback: try to load a local file named source.csv if present
-    try:
-        df = load_df("source.csv")
-        st.info("Using local 'source.csv' found in the same folder (since you didn't upload a file here).")
-    except Exception:
-        # Welcome message for new users
-        st.markdown("## 👋 Welcome to the FTD & KYC Analytics Dashboard!")
-        
-        st.markdown("""
-        ### 🎯 Quick Start in 3 Steps:
-        1. **Upload your CSV file** using the file uploader above
-        2. **View your data** - Dashboard loads automatically with 2025 data
-        3. **Filter as needed** - Use the left sidebar to refine your view
-        
-        ### 📋 Your CSV Should Have:
-        - **FTD dates**: Column named `portal - ftd_time`
-        - **KYC dates**: Column named `DATE_CREATED` 
-        - **Sources**: Column named `portal - source_marketing_campaign`
-        - **Countries** (optional): Column named `portal - country`
-        - **Date format**: DD/MM/YYYY (e.g., 31/12/2025)
-        
-        ### ❓ Need Help?
-        - Expand **"🚀 Getting Started"** above for a detailed guide
-        - Check **"📚 CSV Format Guide"** for data requirements
-        - Download a sample template from the CSV Format Guide
-        """)
-        
-        st.info("💡 **Tip**: The dashboard automatically filters to 2025 data and selects all sources by default, so you can see your results immediately after upload!")
-        st.stop()
+    # Check if we have data in session state
+    if 'df' in st.session_state:
+        df = st.session_state.df
+    else:
+        # Fallback: try to load a local file named source.csv if present
+        try:
+            df = load_df("source.csv")
+            st.session_state.df = df
+            st.info("Using local 'source.csv' found in the same folder (since you didn't upload a file here).")
+        except Exception:
+            # Welcome message for new users
+            st.markdown("## 👋 Welcome to the FTD & KYC Analytics Dashboard!")
+            
+            st.markdown("""
+            ### 🎯 Quick Start in 3 Steps:
+            1. **Upload your CSV file** using the file uploader above
+            2. **View your data** - Dashboard loads automatically with 2025 data
+            3. **Filter as needed** - Use the left sidebar to refine your view
+            
+            ### 📋 Your CSV Should Have:
+            - **FTD dates**: Column named `portal - ftd_time`
+            - **KYC dates**: Column named `DATE_CREATED` 
+            - **Sources**: Column named `portal - source_marketing_campaign`
+            - **Countries** (optional): Column named `portal - country`
+            - **Date format**: DD/MM/YYYY (e.g., 31/12/2025)
+            
+            ### ❓ Need Help?
+            - Expand **"🚀 Getting Started"** above for a detailed guide
+            - Check **"📚 CSV Format Guide"** for data requirements
+            - Download a sample template from the CSV Format Guide
+            """)
+            
+            st.info("💡 **Tip**: The dashboard automatically filters to 2025 data and selects all sources by default, so you can see your results immediately after upload!")
+            st.stop()
 
 # Data Quality Check
 with st.expander("📊 Data Quality Report", expanded=False):
