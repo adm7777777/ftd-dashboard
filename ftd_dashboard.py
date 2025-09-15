@@ -195,6 +195,7 @@ with st.expander("🚀 **Getting Started - Quick Guide**", expanded=False):
            - `portal - ftd_time` (FTD dates)
            - `DATE_CREATED` (KYC dates)
            - `portal - source_marketing_campaign` (sources)
+           - `portal - country` (countries - optional)
            - Dates should be DD/MM/YYYY format
         
         2. **Click "Browse files"** below or drag & drop
@@ -215,13 +216,19 @@ with st.expander("🚀 **Getting Started - Quick Guide**", expanded=False):
            - Use "Select All" or "Top N" buttons
            - Individual checkboxes for fine control
         
-        2. **Date Range**:
+        2. **Country Filter** (if country data available):
+           - Search for specific countries
+           - Use "Select All" or "Top N" buttons
+           - Individual checkboxes for fine control
+        
+        3. **Date Range**:
            - Quick buttons: 2025, Last 6M, YTD
            - Year buttons: Select/deselect entire years
            - Individual month checkboxes
         
         ### 💡 Pro Tips
         - **Default view** shows all 2025 data
+        - **Country filtering** appears when CSV has country column
         - **Hover on charts** to see exact values
         - **Export data** in CSV, Excel, or JSON
         - **1/1/1970 dates** = No FTD yet (placeholders)
@@ -261,9 +268,18 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
         - **Examples**: IB-18050031, MKT-Campaign, etc.
         - **Empty/null**: Becomes "(Unknown)" Organic
         """)
+        
+        st.markdown("#### 4️⃣ `portal - country` (Optional)")
+        st.markdown("""
+        - **Purpose**: Client's country/location for filtering
+        - **Format**: Text string (country name or code)
+        - **Examples**: United Kingdom, US, Germany, etc.
+        - **Empty/null**: Becomes "(Unknown)" country
+        - **Note**: Enables country filtering when present
+        """)
     
     with col2:
-        st.markdown("#### 4️⃣ `Record ID` (Required)")
+        st.markdown("#### 5️⃣ `Record ID` (Required)")
         st.markdown("""
         - **Purpose**: Unique identifier for each client
         - **Format**: Any unique value (number/text)
@@ -293,9 +309,10 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
     sample_data = pd.DataFrame({
         'Record ID': ['1001', '1002', '1003', '1004', '1005'],
         'portal - ftd_time': ['15/01/2024', '16/01/2024', '17/01/2024', '18/02/2024', '19/02/2024'],
+        'DATE_CREATED': ['15/01/2024 10:30:00', '16/01/2024 14:15:00', '17/01/2024 09:45:00', '18/02/2024 16:20:00', '19/02/2024 11:10:00'],
         'portal - source_marketing_campaign': ['Google_Campaign_Q1', 'IB_Partner_John', '', 'Facebook_Ads_2024', 'IB_Sarah_Team'],
-        'Other_Field_1': ['value1', 'value2', 'value3', 'value4', 'value5'],
-        'Other_Field_2': ['data1', 'data2', 'data3', 'data4', 'data5']
+        'portal - country': ['United Kingdom', 'Germany', 'France', 'Spain', 'Italy'],
+        'Other_Field_1': ['value1', 'value2', 'value3', 'value4', 'value5']
     })
     
     st.dataframe(sample_data, hide_index=True, width="stretch")
@@ -751,6 +768,7 @@ else:
         - **FTD dates**: Column named `portal - ftd_time`
         - **KYC dates**: Column named `DATE_CREATED` 
         - **Sources**: Column named `portal - source_marketing_campaign`
+        - **Countries** (optional): Column named `portal - country`
         - **Date format**: DD/MM/YYYY (e.g., 31/12/2025)
         
         ### ❓ Need Help?
