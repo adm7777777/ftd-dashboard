@@ -1036,7 +1036,6 @@ with tour_container:
 # --- Sidebar filters ---
 # Get the actual source column name from the dataframe
 source_col = df.attrs.get('source_col', 'portal - source_marketing_campaign')
-group_sources = False  # Initialize here so it's available outside sidebar
 
 with st.sidebar:
     st.header("Filters")
@@ -1507,8 +1506,6 @@ if dashboard_type == "KYC & FTD Comparison":
         
         # Set display sources for the chart
         display_sources = sorted(counts[source_col].unique())
-    
-    group_sources = False  # Don't use regular grouping logic
     
 elif len(dff) == 0:
     # No data after filtering - create empty dataframe with expected structure
