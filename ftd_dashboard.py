@@ -1396,7 +1396,13 @@ else:
     # Also filter out records with invalid dates for this dashboard
     mask_valid_dates = df[filter_date_col].notna()
 
-    mask_source = df[source_col].isin(selected_sources) if selected_sources else pd.Series(True, index=df.index)
+    # Source filtering (skip for country analysis)
+    if analysis_dimension == "country":
+        # For country analysis, don't filter by source - show all sources within selected countries
+        mask_source = pd.Series(True, index=df.index)
+    else:
+        # For source analysis, filter by selected sources
+        mask_source = df[source_col].isin(selected_sources) if selected_sources else pd.Series(True, index=df.index)
     
     # Add country filtering if country data exists
     if df.attrs.get('has_country', False) and selected_countries:
