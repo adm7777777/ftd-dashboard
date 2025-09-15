@@ -1161,7 +1161,7 @@ with st.sidebar:
         filtered_countries = [c for c in all_countries if country_search_term.lower() in c.lower()]
         
         # Display count
-        st.caption(f"Showing {len(filtered_countries)} of {len(all_countries)} countries | {len(st.session_state.selected_countries)} selected")
+        st.caption(f"Showing {len(filtered_countries)} of {len(all_countries)} countries | {len(st.session_state[countries_key])} selected")
         
         # Scrollable container with checkboxes for countries
         st.markdown("---")
@@ -1170,20 +1170,20 @@ with st.sidebar:
         with country_container:
             for country in filtered_countries:
                 count = country_totals[country]
-                is_selected = country in st.session_state.selected_countries
+                is_selected = country in st.session_state[countries_key]
                 
                 # Create checkbox with country name and count
                 new_state = st.checkbox(
                     f"{country} ({count:,} clients)",
                     value=is_selected,
-                    key=f"country_checkbox_{country}"
+                    key=f"country_checkbox_{country}_{dashboard_type}"
                 )
                 
                 # Update session state based on checkbox
-                if new_state and country not in st.session_state.selected_countries:
-                    st.session_state.selected_countries.append(country)
-                elif not new_state and country in st.session_state.selected_countries:
-                    st.session_state.selected_countries.remove(country)
+                if new_state and country not in st.session_state[countries_key]:
+                    st.session_state[countries_key].append(country)
+                elif not new_state and country in st.session_state[countries_key]:
+                    st.session_state[countries_key].remove(country)
     else:
         # Initialize empty country selection when no country data
         if "selected_countries" not in st.session_state:
@@ -1390,14 +1390,19 @@ if dashboard_type == "KYC & FTD Comparison":
     mask_source = pd.Series(True, index=df.index)
     
     # For comparison dashboard, use its own country selection
-    if df.attrs.get('has_country', False) and selected_countries:
+    if df.attrs.get('has_country', False):
         country_col = df.attrs.get('country_col')
         if country_col and country_col in df.columns:
-            mask_country = df[country_col].isin(selected_countries)
+            if len(selected_countries) > 0:
+                # Filter to selected countries
+                mask_country = df[country_col].isin(selected_countries)
+            else:
+                # No countries selected = no data (empty result)
+                mask_country = pd.Series(False, index=df.index)
         else:
             mask_country = pd.Series(True, index=df.index)
     else:
-        mask_country = pd.Series(True, index=df.index)  # No country filtering if none selected or no country data
+        mask_country = pd.Series(True, index=df.index)  # No country filtering if no country data
     
     # Create two filtered dataframes
     dff_ftd = df.loc[mask_time_ftd & mask_valid_ftd & mask_country].copy()
@@ -1422,11 +1427,19 @@ else:
         mask_source = df[source_col].isin(selected_sources) if selected_sources else pd.Series(True, index=df.index)
     
     # Add country filtering if country data exists
-    if df.attrs.get('has_country', False) and selected_countries:
+    if df.attrs.get('has_country', False):
         country_col = df.attrs.get('country_col')
-        mask_country = df[country_col].isin(selected_countries)
+        if country_col and country_col in df.columns:
+            if len(selected_countries) > 0:
+                # Filter to selected countries
+                mask_country = df[country_col].isin(selected_countries)
+            else:
+                # No countries selected = no data (empty result)
+                mask_country = pd.Series(False, index=df.index)
+        else:
+            mask_country = pd.Series(True, index=df.index)
     else:
-        mask_country = pd.Series(True, index=df.index)  # No country filtering
+        mask_country = pd.Series(True, index=df.index)  # No country filtering if no country data
     
     dff = df.loc[mask_time & mask_valid_dates & mask_source & mask_country].copy()
 
