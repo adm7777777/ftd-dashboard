@@ -1801,7 +1801,9 @@ else:
             domain=display_sources,
             range=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"][:len(display_sources)]
         )
-else:
+
+# Default color scale when no special conditions apply
+if 'color_scale' not in locals():
     if group_sources:
         # Use specific colors for grouped categories without total
         color_mapping = {
