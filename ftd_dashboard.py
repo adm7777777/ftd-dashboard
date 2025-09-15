@@ -1506,6 +1506,42 @@ elif len(dff) == 0:
         full = pd.MultiIndex.from_product([months, display_sources], names=["ftd_month", source_col]).to_frame(index=False)
         full["clients"] = 0
         counts = full
+elif analysis_dimension == "country":
+    # Group by country for country dashboards
+    country_col = df.attrs.get('country_col')
+    if country_col and country_col in dff.columns:
+        counts = (
+            dff.groupby([filter_month_col, country_col])["Record ID"].size().reset_index(name="clients")
+        )
+        counts.rename(columns={filter_month_col: "month"}, inplace=True)
+        
+        # Get unique countries from filtered data
+        selected_display_countries = dff[country_col].unique().tolist()
+        
+        # Use only selected months, not a continuous range
+        months = sorted(selected_months) if selected_months else []
+        # Ensure all (month, country) combos exist
+        if len(months) > 0 and len(selected_display_countries) > 0:
+            full = (
+                pd.MultiIndex.from_product([months, selected_display_countries], names=["month", country_col])
+                .to_frame(index=False)
+            )
+            counts = (
+                full.merge(counts, on=["month", country_col], how="left")
+                .fillna({"clients": 0})
+            )
+        # Rename back for consistency
+        counts.rename(columns={"month": "ftd_month"}, inplace=True)
+        
+        # Update display_sources to be countries for display purposes
+        display_sources = selected_display_countries
+        # Update the column name reference for charts
+        source_col_for_chart = country_col
+    else:
+        # Fallback if no country column
+        counts = pd.DataFrame(columns=["ftd_month", source_col, "clients"])
+        display_sources = []
+        source_col_for_chart = source_col
 elif group_sources:
     # Add source category column
     dff['source_category'] = dff[source_col].apply(categorize_source)
@@ -1839,7 +1875,12 @@ if dashboard_type == "KYC & FTD Comparison":
     else:
         st.markdown("### KYC vs FTD Comparison by Source Type")
 else:
-    st.markdown("### Monthly acquisition by source")
+    if analysis_dimension == "country":
+        st.markdown("### Monthly acquisition by country")
+    elif group_sources:
+        st.markdown("### Monthly acquisition by source type")
+    else:
+        st.markdown("### Monthly acquisition by source")
 if not chart_data.empty:
     st.altair_chart(chart.properties(height=380).interactive(), use_container_width=True)
 else:
@@ -1848,11 +1889,13 @@ else:
 # Pivot table (not for comparison dashboard)
 if dashboard_type != "KYC & FTD Comparison":
     st.markdown("### Table: counts by month")
-    if group_sources:
+    if analysis_dimension == "country":
+        st.caption("🌍 Data grouped by country")
+    elif group_sources:
         st.caption("📊 Data grouped by category (IB / Organic / Marketing)")
 
     if len(counts) > 0:
-        pivot = counts.pivot_table(index="ftd_month", columns=source_col, values="clients", fill_value=0).sort_index()
+        pivot = counts.pivot_table(index="ftd_month", columns=source_col_for_chart, values="clients", fill_value=0).sort_index()
 
         # Add total column if more than one source/category
         if len(display_sources) > 1:
@@ -1870,15 +1913,20 @@ if dashboard_type != "KYC & FTD Comparison":
 
     # Source Performance Ranking
     if len(display_sources) > 0:
-        st.markdown("### Source Performance Ranking")
+        if analysis_dimension == "country":
+            st.markdown("### Country Performance Ranking")
+        else:
+            st.markdown("### Source Performance Ranking")
     
-    if group_sources:
+    if analysis_dimension == "country":
+        st.info("🌍 Showing performance for countries")
+    elif group_sources:
         st.info("📊 Showing performance for grouped categories")
     
     # Calculate source statistics
     source_stats = []
     for source in display_sources:
-        source_data = counts[counts[source_col] == source]
+        source_data = counts[counts[source_col_for_chart] == source]
         total = source_data["clients"].sum()
         avg = source_data["clients"].mean()
         max_val = source_data["clients"].max()
@@ -1900,7 +1948,12 @@ if dashboard_type != "KYC & FTD Comparison":
         else:
             trend = "➡️"
         
-        label = "Category" if group_sources else "Source"
+        if analysis_dimension == "country":
+            label = "Country"
+        elif group_sources:
+            label = "Category"
+        else:
+            label = "Source"
         source_stats.append({
             label: source,
             "Total Clients": safe_int_convert(total),
