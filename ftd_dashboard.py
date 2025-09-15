@@ -1328,32 +1328,7 @@ with st.sidebar:
 
     chart_type = st.radio("Chart type", ["Line", "Stacked bars"], horizontal=True)
     
-    st.markdown("---")
-    st.subheader("Display Options")
-    
-    # Add view mode toggle for comparison dashboard
-    if dashboard_type == "KYC & FTD Comparison":
-        comparison_view = st.radio(
-            "View Mode",
-            ["Conversion Rate %", "Absolute Numbers"],
-            index=0,  # Default to Conversion Rate %
-            horizontal=True,
-            help="Switch between conversion rate percentages and absolute client counts"
-        )
-    else:
-        comparison_view = "Absolute Numbers"  # Default for other dashboards
-    
-    show_total = st.checkbox("Show Total (All Sources)", value=True, help="Display a line showing the total across all selected sources")
-    
-    # Source grouping option
-    group_sources = st.checkbox("Group Sources by Type", value=False, 
-                                help="Group sources into IB, Organic (Unknown), and Marketing categories")
-    
-    if group_sources:
-        st.caption("📊 **Grouping Logic:**")
-        st.caption("• **IB**: Sources containing 'IB' in the name")
-        st.caption("• **Organic**: Unknown sources")
-        st.caption("• **Marketing**: All other sources")
+    # (Display Options moved above chart for better UX)
     
     # Debug mode toggle at the bottom
     st.markdown("---")
@@ -1910,6 +1885,37 @@ else:
     chart = chart_base.mark_bar(opacity=0.9).add_params(hover).encode(
         opacity=alt.condition(hover, alt.value(1), alt.value(0.7))
     )
+
+# Display Options (moved from sidebar for better visibility)
+st.subheader("📊 Display Options")
+
+col1, col2, col3 = st.columns([2, 2, 2])
+
+with col1:
+    # Add view mode toggle for comparison dashboard
+    if dashboard_type == "KYC & FTD Comparison":
+        comparison_view = st.radio(
+            "View Mode",
+            ["Conversion Rate %", "Absolute Numbers"],
+            index=0,  # Default to Conversion Rate %
+            horizontal=True,
+            help="Switch between conversion rate percentages and absolute client counts"
+        )
+    else:
+        comparison_view = "Absolute Numbers"  # Default for other dashboards
+
+with col2:
+    show_total = st.checkbox("Show Total (All Sources)", value=True, help="Display a line showing the total across all selected sources")
+
+with col3:
+    # Source grouping option
+    group_sources = st.checkbox("Group Sources by Type", value=False, 
+                                help="Group sources into IB, Organic (Unknown), and Marketing categories")
+
+if group_sources:
+    st.caption("📊 **Grouping Logic:** IB (sources with 'IB') • Organic (Unknown) • Marketing (all others)")
+
+st.markdown("---")
 
 if dashboard_type == "KYC & FTD Comparison":
     if comparison_view == "Conversion Rate %":
