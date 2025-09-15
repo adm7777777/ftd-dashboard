@@ -1315,6 +1315,12 @@ with st.sidebar:
     
     # Initialize source_col_for_chart (will be updated based on analysis dimension)
     source_col_for_chart = source_col
+    
+    # Initialize comparison_view (will be updated in Display Options section)
+    if dashboard_type == "KYC & FTD Comparison":
+        comparison_view = "Conversion Rate %"  # Default value
+    else:
+        comparison_view = "Absolute Numbers"
     if selected_months:
         start = min(selected_months)
         end = max(selected_months)
@@ -1897,12 +1903,10 @@ with col1:
         comparison_view = st.radio(
             "View Mode",
             ["Conversion Rate %", "Absolute Numbers"],
-            index=0,  # Default to Conversion Rate %
+            index=0 if comparison_view == "Conversion Rate %" else 1,  # Use current value as default
             horizontal=True,
             help="Switch between conversion rate percentages and absolute client counts"
         )
-    else:
-        comparison_view = "Absolute Numbers"  # Default for other dashboards
 
 with col2:
     show_total = st.checkbox("Show Total (All Sources)", value=True, help="Display a line showing the total across all selected sources")
