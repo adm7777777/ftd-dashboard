@@ -158,6 +158,8 @@ st.markdown("""
 has_country_data = False
 if 'df' in st.session_state and hasattr(st.session_state.df, 'attrs'):
     has_country_data = st.session_state.df.attrs.get('has_country', False)
+elif st.session_state.get('country_dashboard_available', False):
+    has_country_data = True
 
 if has_country_data:
     dashboard_options = [
@@ -768,6 +770,11 @@ if uploaded is not None:
         df = load_df(uploaded)
         # Store in session state for dashboard selector
         st.session_state.df = df
+        
+        # If this is the first time loading data with country, trigger a rerun to update dashboard selector
+        if df.attrs.get('has_country', False) and not st.session_state.get('country_dashboard_available', False):
+            st.session_state.country_dashboard_available = True
+            st.rerun()
         
         # Only show debug info if there are issues or debug mode is enabled
         show_debug = False
