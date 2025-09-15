@@ -1767,7 +1767,7 @@ if dashboard_type == "KYC & FTD Comparison":
 elif show_total and (len(display_sources) > 1 or group_sources):
     # Calculate monthly totals
     monthly_totals = counts.groupby("ftd_month")["clients"].sum().reset_index()
-    monthly_totals[source_col] = "📊 TOTAL"
+    monthly_totals[source_col_for_chart] = "📊 TOTAL"
     
     # Combine with original data
     chart_data = pd.concat([counts, monthly_totals], ignore_index=True)
@@ -1833,22 +1833,22 @@ chart_base = alt.Chart(chart_data).encode(
 if chart_type == "Line":
     # Create line with visible points for better hover experience
     # Make TOTAL line thicker if present
-    if show_total and ("📊 TOTAL" in chart_data[source_col].values):
+    if show_total and ("📊 TOTAL" in chart_data[source_col_for_chart].values):
         line = chart_base.mark_line().encode(
             strokeWidth=alt.condition(
-                alt.datum[source_col] == "📊 TOTAL",
+                alt.datum[source_col_for_chart] == "📊 TOTAL",
                 alt.value(4),  # Thicker line for total
                 alt.value(2)   # Normal line for sources
             ),
             opacity=alt.condition(
-                alt.datum[source_col] == "📊 TOTAL",
+                alt.datum[source_col_for_chart] == "📊 TOTAL",
                 alt.value(1),    # Full opacity for total
                 alt.value(0.7)   # Slightly transparent for sources
             )
         )
         points = chart_base.mark_circle().encode(
             size=alt.condition(
-                alt.datum[source_col] == "📊 TOTAL",
+                alt.datum[source_col_for_chart] == "📊 TOTAL",
                 alt.value(70),   # Bigger points for total
                 alt.value(40)    # Normal points for sources
             ),
