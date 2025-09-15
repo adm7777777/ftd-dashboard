@@ -1921,6 +1921,13 @@ with col2:
 if group_sources:
     st.caption("📊 **Grouping:** IB (sources with 'IB') • Organic (Unknown) • Marketing (all others)")
 
+# Debug info (temporary)
+if st.checkbox("🔧 Debug Display Options", value=False):
+    st.write(f"show_total: {show_total}")
+    st.write(f"group_sources: {group_sources}")
+    st.write(f"len(display_sources): {len(display_sources) if 'display_sources' in locals() else 'Not defined'}")
+    st.write(f"Total line condition: {show_total and (len(display_sources) > 1 or group_sources) if 'display_sources' in locals() else 'Cannot evaluate'}")
+
 st.markdown("---")
 
 if dashboard_type == "KYC & FTD Comparison":
@@ -1936,7 +1943,9 @@ else:
     else:
         st.markdown("### Monthly acquisition by source")
 if not chart_data.empty:
-    st.altair_chart(chart.properties(height=380).interactive(), use_container_width=True)
+    # Add unique key based on display options to force chart refresh
+    chart_key = f"chart_{show_total}_{group_sources}_{len(display_sources)}"
+    st.altair_chart(chart.properties(height=380).interactive(), use_container_width=True, key=chart_key)
 else:
     st.info("No data to display. Please select at least one source from the sidebar.")
 
