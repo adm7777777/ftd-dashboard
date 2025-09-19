@@ -536,8 +536,16 @@ def parse_dd_mm_yyyy_date(date_str, debug=False):
 
 @st.cache_data(show_spinner=False)
 def load_df(file):
-    # Read Excel with ALL columns as strings first to prevent pandas auto-parsing dates incorrectly
-    df = pd.read_excel(file, dtype=str)
+    """Simple, bulletproof Excel/CSV loader - NO SYNTHETIC DATES!"""
+    
+    # Step 1: Read the file based on extension
+    if file.name.endswith('.csv'):
+        df = pd.read_csv(file, parse_dates=False, dtype=str)
+    else:
+        # For Excel, read everything as strings first
+        df = pd.read_excel(file, dtype=str)
+    
+    print(f"✅ Loaded {len(df)} records from {file.name}")
     original_count = len(df)
     
     # Create debug info to show in UI
@@ -589,8 +597,10 @@ def load_df(file):
     # Also print to console
     print('\n'.join(debug_info))
     
-    # Expected columns - BOTH date columns must be present
-    # Note: Handle variations in column names
+    # SIMPLE APPROACH: Clean column names first
+    df.columns = df.columns.str.strip()
+    
+    # Expected columns
     ftd_date_col = "portal - ftd_time"
     kyc_date_col = "DATE_CREATED"
     source_col = "portal - source_marketing_campaign"
@@ -664,26 +674,55 @@ def load_df(file):
     print(f"\n📋 Total columns: {len(df.columns)}")
     print(f"📊 DataFrame shape: {df.shape}")
     
-    # Parse FTD date column using EXPLICIT DD/MM/YYYY parser
-    sample_dates = df[ftd_date_col].head(20).tolist()
-    print(f"DEBUG: Sample raw FTD dates: {sample_dates[:10]}")
-    print(f"DEBUG: Data types: {df[ftd_date_col].dtype}")
+    # SIMPLE DATE PARSING - NO SYNTHETIC DATES!
+    print(f"\n📊 BEFORE processing {ftd_date_col}:")
+    print(f"  Non-empty values: {df[ftd_date_col].notna().sum()}")
+    print(f"  Sample values: {df[ftd_date_col].dropna().head(5).tolist()}")
     
-    # Check for unique date formats in the data
-    unique_formats = df[ftd_date_col].astype(str).str.extract(r'(\d+)[/-](\d+)[/-](\d+)', expand=False).notna().all(axis=1).sum()
-    print(f"DEBUG: Dates matching DD/MM/YYYY or DD-MM-YYYY pattern: {unique_formats}")
+    # SIMPLE function: if it contains "1970" it's NULL, otherwise try to parse it
+    def simple_date_parse(val):
+        if pd.isna(val) or val == '':
+            return pd.NaT
+        val_str = str(val).strip()
+        
+        # 1970 = placeholder for "no FTD"
+        if '1970' in val_str:
+            return pd.NaT
+            
+        # Try to parse anything else - let pandas figure it out!
+        try:
+            parsed = pd.to_datetime(val_str, dayfirst=True)
+            if parsed and parsed.year > 1970:
+                return parsed
+        except:
+            pass
+        return pd.NaT
     
-    # Debug parse first few dates to see what's happening
-    print("DEBUG: Parsing first 5 dates with debug mode:")
-    for i, date_str in enumerate(sample_dates[:5]):
-        print(f"  Date {i+1}: '{date_str}' (type: {type(date_str).__name__}, repr: {repr(date_str)})")
-        parse_dd_mm_yyyy_date(date_str, debug=True)
-    
-    # Apply the explicit parser to all FTD dates
-    df[ftd_date_col] = df[ftd_date_col].apply(parse_dd_mm_yyyy_date)
+    # Apply the simple parser
+    df[ftd_date_col] = df[ftd_date_col].apply(simple_date_parse)
     
     # Ensure the column is datetime type
     df[ftd_date_col] = pd.to_datetime(df[ftd_date_col])
+    
+    # Count what we have AFTER processing
+    valid_ftds = df[ftd_date_col].notna().sum()
+    print(f"\n✅ AFTER processing {ftd_date_col}:")
+    print(f"  Valid FTD dates: {valid_ftds}")  # Should be ~559!
+    print(f"  No FTD (NULL): {len(df) - valid_ftds}")
+    
+    if valid_ftds == 0:
+        print("\n⚠️ WARNING: No valid FTD dates found!")
+        print("Checking if we should use deposit flag instead...")
+        
+        # FALLBACK: Use deposit flag if date parsing fails
+        if 'portal - made_a_deposit_' in df.columns:
+            has_deposit = (df['portal - made_a_deposit_'] == 'Yes').sum()
+            print(f"Found {has_deposit} clients with deposits (portal - made_a_deposit_ = Yes)")
+            
+            if has_deposit > 0:
+                # DON'T CREATE FAKE DATES! Just mark them
+                df['has_ftd'] = df['portal - made_a_deposit_'] == 'Yes'
+                print(f"✅ Using deposit flag for FTD detection: {has_deposit} FTD clients")
     
     # Show parsing success rate BEFORE filtering
     valid_dates_before_filter = df[ftd_date_col].notna().sum()
@@ -707,19 +746,12 @@ def load_df(file):
     valid_dates_after_filter = df[ftd_date_col].notna().sum()
     print(f'✅ Final: {valid_dates_after_filter} valid FTD dates after filtering ({ftd_before_2023} before 2023, {ftd_future} after 2026)')
     
-    # Parse KYC date column using EXPLICIT DD/MM/YYYY parser
-    print(f"DEBUG: Sample raw KYC dates from '{kyc_date_col}': {df[kyc_date_col].head(10).tolist()}")
-    print(f"DEBUG: KYC column dtype before parsing: {df[kyc_date_col].dtype}")
+    # SIMPLE KYC date parsing - let pandas do the work
+    print(f"\n📊 Processing KYC dates from '{kyc_date_col}':")
+    print(f"  Sample raw values: {df[kyc_date_col].head(5).tolist()}")
     
-    # Test parse a few KYC dates with debug mode
-    print("DEBUG: Testing KYC date parsing:")
-    for i, date_str in enumerate(df[kyc_date_col].head(5)):
-        print(f"  KYC Date {i+1}: '{date_str}'")
-        result = parse_dd_mm_yyyy_date(date_str, debug=True)
-        print(f"    Result: {result}")
-    
-    # Apply the explicit parser to all KYC dates
-    df[kyc_date_col] = df[kyc_date_col].apply(parse_dd_mm_yyyy_date)
+    # Simple KYC date parsing - let pandas handle it
+    df[kyc_date_col] = pd.to_datetime(df[kyc_date_col], errors='coerce', dayfirst=True)
     
     # Ensure the column is datetime type
     df[kyc_date_col] = pd.to_datetime(df[kyc_date_col])
