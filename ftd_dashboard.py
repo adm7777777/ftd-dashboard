@@ -230,14 +230,14 @@ with st.expander("🚀 **Getting Started - Quick Guide**", expanded=False):
     with col1:
         st.markdown("""
         ### 📤 How to Upload Your Data
-        1. **Prepare your CSV** with these columns:
+        1. **Prepare your Excel file** with these columns:
            - `portal - ftd_time` (FTD dates)
            - `DATE_CREATED` (KYC dates)
            - `portal - source_marketing_campaign` (sources)
            - `portal - country` (countries - optional)
-           - Dates should be DD/MM/YYYY format
+           - Dates should be DD/MM/YYYY format (Excel handles this automatically)
         
-        2. **Click "Browse files"** below or drag & drop
+        2. **Click "Browse files"** below and select your .xlsx file
         
         3. **Wait for processing** (~2-3 seconds)
         
@@ -267,17 +267,17 @@ with st.expander("🚀 **Getting Started - Quick Guide**", expanded=False):
         
         ### 💡 Pro Tips
         - **Default view** shows all 2025 data
-        - **Country filtering** appears when CSV has country column
+        - **Country filtering** appears when Excel file has country column
         - **Hover on charts** to see exact values
         - **Export data** in CSV, Excel, or JSON
         - **1/1/1970 dates** = No FTD yet (placeholders)
         """)
     
-    st.info("📌 **Quick Start**: Just upload your CSV and the dashboard will automatically show your 2025 data. Use the left sidebar to filter by source or date range.")
+    st.info("📌 **Quick Start**: Just upload your Excel file and the dashboard will automatically show your 2025 data. Use the left sidebar to filter by source or date range.")
 
-# --- CSV Format Guide ---
-with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
-    st.markdown("### Required CSV Fields")
+# --- Excel Format Guide ---
+with st.expander("📚 **Excel Format Guide & Instructions**", expanded=False):
+    st.markdown("### Required Excel Fields")
     
     col1, col2 = st.columns(2)
     
@@ -334,7 +334,7 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
         """)
         
         st.warning("""
-        **⚠️ Important**: Both date columns MUST be present in your CSV file:
+        **⚠️ Important**: Both date columns MUST be present in your Excel file:
         - `portal - ftd_time` (for FTD)
         - `DATE_CREATED` or `date_created` (for KYC)
         
@@ -342,7 +342,7 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
         """)
     
     st.markdown("---")
-    st.markdown("### Example CSV Structure")
+    st.markdown("### Example Excel Structure")
     
     # Create sample data
     sample_data = pd.DataFrame({
@@ -359,15 +359,18 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        # Download sample CSV template
-        csv_template = sample_data.to_csv(index=False)
+        # Download sample Excel template
+        from io import BytesIO
+        excel_buffer = BytesIO()
+        sample_data.to_excel(excel_buffer, index=False, engine='openpyxl')
+        excel_template = excel_buffer.getvalue()
         st.download_button(
-            "📥 Download Sample CSV Template",
-            data=csv_template,
-            file_name="ftd_template.csv",
-            mime="text/csv",
+            "📥 Download Sample Excel Template",
+            data=excel_template,
+            file_name="ftd_template.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
-            help="Download a sample CSV with the correct format"
+            help="Download a sample Excel template with the correct format"
         )
     
     with col2:
@@ -406,12 +409,12 @@ with st.expander("📚 **CSV Format Guide & Instructions**", expanded=False):
         """)
 
 # --- Load data ---
-uploaded = st.file_uploader("Upload CSV (must include both date columns and source column)", type=["csv"])
+uploaded = st.file_uploader("Upload Excel file (must include both date columns and source column)", type=["xlsx"])
 
 def parse_dd_mm_yyyy_date(date_str, debug=False):
     """Smart date parser that handles BOTH formats:
-    - YYYY-MM-DD (raw CSV format from databases/exports)
-    - DD/MM/YYYY (manual entry or Excel re-saved)
+    - YYYY-MM-DD (raw database format from exports)
+    - DD/MM/YYYY (Excel format or manual entry)
     
     Examples:
     - "2024-08-19 14:39:00" → August 19, 2024 ✓
@@ -421,7 +424,7 @@ def parse_dd_mm_yyyy_date(date_str, debug=False):
     """
     try:
         # Convert to string and clean
-        date_str = str(date_str).strip().strip('"')  # Remove quotes from CSV
+        date_str = str(date_str).strip().strip('"')  # Remove quotes from data
         
         # Handle various null representations
         null_values = ['nan', 'NaN', 'None', '', 'NaT', 'nat', 'NAT', '<NA>', 
@@ -443,7 +446,7 @@ def parse_dd_mm_yyyy_date(date_str, debug=False):
         # CRITICAL: Check format based on separators
         # If it contains '-' and looks like YYYY-MM-DD, parse it as such
         if '-' in date_str and len(date_str.split('-')[0]) == 4:
-            # This is YYYY-MM-DD format (raw CSV from database)
+            # This is YYYY-MM-DD format (raw database format)
             if debug:
                 print(f"  Detected YYYY-MM-DD format: {date_str}")
             try:
@@ -533,15 +536,15 @@ def parse_dd_mm_yyyy_date(date_str, debug=False):
 
 @st.cache_data(show_spinner=False)
 def load_df(file):
-    # Read CSV with ALL columns as strings first to prevent pandas auto-parsing dates incorrectly
-    df = pd.read_csv(file, dtype=str)
+    # Read Excel with ALL columns as strings first to prevent pandas auto-parsing dates incorrectly
+    df = pd.read_excel(file, dtype=str)
     original_count = len(df)
     
     # Create debug info to show in UI
     debug_info = []
     
     # Just show me the first 5 rows of the ENTIRE CSV as-is
-    debug_info.append("📄 RAW CSV DATA - First 5 rows:")
+    debug_info.append("📄 RAW EXCEL DATA - First 5 rows:")
     debug_info.append(df.head().to_string())
     
     # Show EXACT column names (check for extra spaces/characters)  
@@ -629,7 +632,7 @@ def load_df(file):
         missing_cols.append(source_col)
     
     if missing_cols:
-        raise ValueError(f"CSV is missing required columns: {missing_cols}. Found columns: {list(df.columns)}")
+        raise ValueError(f"Excel file is missing required columns: {missing_cols}. Found columns: {list(df.columns)}")
     
     # Use the actual column names found
     ftd_date_col = actual_ftd_col
@@ -638,7 +641,7 @@ def load_df(file):
     
     # Debug: Show actual raw date values
     print("🔍 RAW DATE DEBUGGING:")
-    print("📌 NOTE: Reading all CSV columns as strings to prevent pandas auto-parsing")
+    print("📌 NOTE: Reading all Excel columns as strings to prevent pandas auto-parsing")
     
     # EMERGENCY: Show ALL columns and sample values
     print("\n🚨 EMERGENCY DEBUG - ALL COLUMNS AND SAMPLE VALUES:")
@@ -786,7 +789,7 @@ if uploaded is not None:
                 show_debug = True
         
         if show_debug or st.session_state.get('debug_mode', False):
-            with st.expander("🔍 RAW CSV DEBUG INFO", expanded=False):
+            with st.expander("🔍 RAW EXCEL DEBUG INFO", expanded=False):
                 if hasattr(df, 'attrs') and 'debug_info' in df.attrs:
                     st.code(df.attrs['debug_info'], language='text')
                 else:
@@ -811,21 +814,21 @@ else:
             
             st.markdown("""
             ### 🎯 Quick Start in 3 Steps:
-            1. **Upload your CSV file** using the file uploader above
+            1. **Upload your Excel file** using the file uploader above
             2. **View your data** - Dashboard loads automatically with 2025 data
             3. **Filter as needed** - Use the left sidebar to refine your view
             
-            ### 📋 Your CSV Should Have:
+            ### 📋 Your Excel File Should Have:
             - **FTD dates**: Column named `portal - ftd_time`
             - **KYC dates**: Column named `DATE_CREATED` 
             - **Sources**: Column named `portal - source_marketing_campaign`
             - **Countries** (optional): Column named `portal - country`
-            - **Date format**: DD/MM/YYYY (e.g., 31/12/2025)
+            - **Date format**: DD/MM/YYYY (Excel handles this automatically)
             
             ### ❓ Need Help?
             - Expand **"🚀 Getting Started"** above for a detailed guide
-            - Check **"📚 CSV Format Guide"** for data requirements
-            - Download a sample template from the CSV Format Guide
+            - Check **"📚 Excel Format Guide"** for data requirements
+            - Download a sample template from the Excel Format Guide
             """)
             
             st.info("💡 **Tip**: The dashboard automatically filters to 2025 data and selects all sources by default, so you can see your results immediately after upload!")
@@ -911,14 +914,14 @@ with st.expander("📊 Data Quality Report", expanded=False):
                 st.caption("No valid dates found")
                 # Show some raw date samples for debugging
                 raw_samples = df[active_date_col].head(5)
-                st.caption("Raw date samples from CSV:")
+                st.caption("Raw date samples from Excel file:")
                 for i, raw_date in enumerate(raw_samples):
                     st.caption(f"  • Row {i+1}: '{raw_date}'")
         else:
             st.metric("Date Range", "No valid dates")
             # Show raw date samples for debugging
             raw_samples = df[active_date_col].head(5)
-            st.caption("Raw date samples from CSV:")
+            st.caption("Raw date samples from Excel file:")
             for i, raw_date in enumerate(raw_samples):
                 st.caption(f"  • Row {i+1}: '{raw_date}'")
     
@@ -985,7 +988,7 @@ with tour_container:
                 st.info("""
                 **📊 Data Quality (Top Expanders)**
                 
-                • **CSV Format Guide**: Required fields and examples
+                • **Excel Format Guide**: Required fields and examples
                 • **Data Quality Report**: Invalid dates, date range, unknowns
                 • **Monthly Breakdown**: Shows ALL records by month
                 • **Sample Dates**: Verifies DD/MM/YYYY parsing
@@ -1342,7 +1345,7 @@ with st.sidebar:
     st.markdown("---")
     st.session_state.debug_mode = st.checkbox("🔧 Debug Mode", 
                                               value=st.session_state.get('debug_mode', False),
-                                              help="Show raw CSV data and detailed parsing information")
+                                              help="Show raw Excel data and detailed parsing information")
 
 # Apply filters
     # Use the correct month column based on dashboard type
