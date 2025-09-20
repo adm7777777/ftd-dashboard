@@ -542,8 +542,9 @@ def load_df(file):
     if file.name.endswith('.csv'):
         df = pd.read_csv(file, parse_dates=False, dtype=str)
     else:
-        # For Excel, read everything as strings first
-        df = pd.read_excel(file, dtype=str)
+        # CRITICAL FIX: Don't read as strings - we need to see the serial numbers!
+        # Use keep_default_na=False to prevent auto-conversion of 1970 dates to NaN
+        df = pd.read_excel(file, keep_default_na=False, na_values=['', 'None', 'null'])
     
     print(f"✅ Loaded {len(df)} records from {file.name}")
     original_count = len(df)
@@ -674,32 +675,61 @@ def load_df(file):
     print(f"\n📋 Total columns: {len(df.columns)}")
     print(f"📊 DataFrame shape: {df.shape}")
     
-    # SIMPLE DATE PARSING - NO SYNTHETIC DATES!
-    print(f"\n📊 BEFORE processing {ftd_date_col}:")
-    print(f"  Non-empty values: {df[ftd_date_col].notna().sum()}")
-    print(f"  Sample values: {df[ftd_date_col].dropna().head(5).tolist()}")
+    # CRITICAL FIX: Handle Excel serial numbers properly
+    print(f"\n📊 Processing FTD dates from '{ftd_date_col}':")
+    print(f"  Column dtype: {df[ftd_date_col].dtype}")
+    print(f"  Non-null values: {df[ftd_date_col].notna().sum()}")
     
-    # SIMPLE function: if it contains "1970" it's NULL, otherwise try to parse it
-    def simple_date_parse(val):
-        if pd.isna(val) or val == '':
+    # Show raw values to understand format
+    print(f"  First 5 raw values:")
+    for i, val in enumerate(df[ftd_date_col].head(5)):
+        print(f"    Row {i+1}: {repr(val)} (type: {type(val).__name__})")
+    
+    def parse_ftd_date(val):
+        """Parse FTD date handling Excel serials correctly"""
+        if pd.isna(val) or val == '' or val is None:
             return pd.NaT
-        val_str = str(val).strip()
         
-        # 1970 = placeholder for "no FTD"
+        # If it's already a datetime, check for 1970
+        if isinstance(val, pd.Timestamp) or hasattr(val, 'year'):
+            if val.year == 1970:
+                return pd.NaT  # 1970 = placeholder
+            return val
+        
+        # Handle numeric values (Excel serial numbers)
+        if isinstance(val, (int, float)):
+            serial = float(val)
+            # CRITICAL: 25569 = 1970-01-01 = NULL placeholder
+            if serial == 25569 or serial == 0:
+                return pd.NaT
+            # Valid Excel serials
+            if serial > 25569:
+                try:
+                    return pd.to_datetime(serial, origin='1899-12-30', unit='D')
+                except:
+                    return pd.NaT
+            return pd.NaT
+        
+        # Handle string values
+        val_str = str(val).strip()
         if '1970' in val_str:
             return pd.NaT
-            
-        # Try to parse anything else - let pandas figure it out!
+        
         try:
-            parsed = pd.to_datetime(val_str, dayfirst=True)
-            if parsed and parsed.year > 1970:
-                return parsed
+            # Try parsing as date string
+            return pd.to_datetime(val_str, dayfirst=True, errors='coerce')
         except:
-            pass
-        return pd.NaT
+            return pd.NaT
     
-    # Apply the simple parser
-    df[ftd_date_col] = df[ftd_date_col].apply(simple_date_parse)
+    # Apply the parser
+    df[ftd_date_col] = df[ftd_date_col].apply(parse_ftd_date)
+    
+    # Count results
+    valid_ftds = df[ftd_date_col].notna().sum()
+    null_ftds = df[ftd_date_col].isna().sum()
+    print(f"\n✅ FTD Date Processing Results:")
+    print(f"  Valid FTD dates: {valid_ftds}")  # Should be ~559
+    print(f"  NULL/No FTD: {null_ftds}")  # Should be ~3,972
     
     # Ensure the column is datetime type
     df[ftd_date_col] = pd.to_datetime(df[ftd_date_col])
