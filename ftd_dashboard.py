@@ -732,6 +732,26 @@ def load_df(file):
     # Apply the parser
     df[ftd_date_col] = df[ftd_date_col].apply(parse_ftd_date)
     
+    # IMMEDIATE FIX: If we still have too many dates, something is wrong
+    initial_valid = df[ftd_date_col].notna().sum()
+    if initial_valid > 1000:  # We know there should only be ~590
+        print(f"\n⚠️ WARNING: {initial_valid} dates found - this is wrong! Should be ~590")
+        print("APPLYING EMERGENCY FIX: Filtering by year 1970...")
+        
+        # Check for 1970 dates that weren't caught
+        dates_1970 = 0
+        dates_other = 0
+        for idx, val in df[ftd_date_col].items():
+            if pd.notna(val):
+                if val.year == 1970:
+                    dates_1970 += 1
+                    df.at[idx, ftd_date_col] = pd.NaT  # Convert to NaT
+                else:
+                    dates_other += 1
+        
+        print(f"  Found {dates_1970} dates with year 1970 - converted to NaT")
+        print(f"  Keeping {dates_other} dates with other years")
+    
     # Count results
     valid_ftds = df[ftd_date_col].notna().sum()
     null_ftds = df[ftd_date_col].isna().sum()
