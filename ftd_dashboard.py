@@ -4,6 +4,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
+from datetime import datetime
 
 def safe_int_convert(value, default=0):
     """Safely convert value to int with fallback for None/NaN values"""
@@ -681,9 +682,13 @@ def load_df(file):
     print(f"  Non-null values: {df[ftd_date_col].notna().sum()}")
     
     # Show raw values to understand format
-    print(f"  First 5 raw values:")
-    for i, val in enumerate(df[ftd_date_col].head(5)):
-        print(f"    Row {i+1}: {repr(val)} (type: {type(val).__name__})")
+    print(f"  First 10 raw values:")
+    for i, val in enumerate(df[ftd_date_col].head(10)):
+        val_type = type(val).__name__
+        if hasattr(val, 'year'):
+            print(f"    Row {i+1}: {repr(val)} (type: {val_type}, year: {val.year})")
+        else:
+            print(f"    Row {i+1}: {repr(val)} (type: {val_type})")
     
     def parse_ftd_date(val):
         """Parse FTD date handling Excel serials correctly"""
@@ -691,10 +696,13 @@ def load_df(file):
             return pd.NaT
         
         # If it's already a datetime, check for 1970
-        if isinstance(val, pd.Timestamp) or hasattr(val, 'year'):
-            if val.year == 1970:
-                return pd.NaT  # 1970 = placeholder
-            return val
+        if isinstance(val, (pd.Timestamp, datetime)) or hasattr(val, 'year'):
+            try:
+                if val.year == 1970:
+                    return pd.NaT  # 1970 = placeholder
+                return val
+            except:
+                return val
         
         # Handle numeric values (Excel serial numbers)
         if isinstance(val, (int, float)):
