@@ -740,8 +740,16 @@ def load_df(file):
     print(f"  NULL/No FTD: {null_ftds}")  # Should be ~3,972
     
     # CRITICAL: Check deposit flag as ground truth
-    if 'portal - made_a_deposit_' in df.columns:
-        has_deposit_yes = (df['portal - made_a_deposit_'] == 'Yes').sum()
+    # Handle column names with quotes
+    deposit_col = None
+    for col in df.columns:
+        if 'made_a_deposit' in col.lower():
+            deposit_col = col
+            print(f"Found deposit column: {repr(col)}")
+            break
+    
+    if deposit_col:
+        has_deposit_yes = (df[deposit_col] == 'Yes').sum()
         has_deposit_no_or_null = len(df) - has_deposit_yes
         print(f"\n🎯 DEPOSIT FLAG CHECK (Ground Truth):")
         print(f"  Made deposit = 'Yes': {has_deposit_yes}")  # This should be ~590
@@ -759,7 +767,7 @@ def load_df(file):
             df[ftd_date_col] = pd.NaT
             
             # Only restore dates where deposit = Yes
-            deposit_yes_mask = df['portal - made_a_deposit_'] == 'Yes'
+            deposit_yes_mask = df[deposit_col] == 'Yes'
             df.loc[deposit_yes_mask, ftd_date_col] = original_dates[deposit_yes_mask]
             
             # Recount
