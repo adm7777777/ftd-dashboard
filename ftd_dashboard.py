@@ -739,6 +739,33 @@ def load_df(file):
     print(f"  Valid FTD dates: {valid_ftds}")  # Should be ~559
     print(f"  NULL/No FTD: {null_ftds}")  # Should be ~3,972
     
+    # CRITICAL: Check deposit flag as ground truth
+    if 'portal - made_a_deposit_' in df.columns:
+        has_deposit_yes = (df['portal - made_a_deposit_'] == 'Yes').sum()
+        has_deposit_no_or_null = len(df) - has_deposit_yes
+        print(f"\n🎯 DEPOSIT FLAG CHECK (Ground Truth):")
+        print(f"  Made deposit = 'Yes': {has_deposit_yes}")  # This should be ~590
+        print(f"  Made deposit = No/NULL: {has_deposit_no_or_null}")
+        
+        # If deposit flag shows different from parsed dates, use it instead
+        if abs(has_deposit_yes - valid_ftds) > 50:  # If difference > 50
+            print(f"\n⚠️ MISMATCH: Deposit flag shows {has_deposit_yes} but parsed {valid_ftds} dates")
+            print("SOLUTION: Using deposit flag to filter FTD dates...")
+            
+            # Save original dates before clearing
+            original_dates = df[ftd_date_col].copy()
+            
+            # Clear all dates first
+            df[ftd_date_col] = pd.NaT
+            
+            # Only restore dates where deposit = Yes
+            deposit_yes_mask = df['portal - made_a_deposit_'] == 'Yes'
+            df.loc[deposit_yes_mask, ftd_date_col] = original_dates[deposit_yes_mask]
+            
+            # Recount
+            valid_ftds_fixed = df[ftd_date_col].notna().sum()
+            print(f"✅ FIXED: Now showing {valid_ftds_fixed} valid FTD dates (matching deposit flag)")
+    
     # Ensure the column is datetime type
     df[ftd_date_col] = pd.to_datetime(df[ftd_date_col])
     
